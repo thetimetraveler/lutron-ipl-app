@@ -4,9 +4,10 @@ import { decodeObservation } from "./observations.js";
 import { startTransport } from "./transport.js";
 import { createPublisher } from "./mqtt.js";
 import { resolveBroker } from "./supervisor.js";
-import { startApp } from "./runtime.js";
+import { startExplorerApp } from "./explorer.js";
+import { startExplorerServer } from "./explorer-server.js";
 
-function main():void {
+async function main():Promise<void> {
   const args=process.argv.slice(2);
   if(args.length===1&&args[0]==="--help") {
     console.log("Lutron IPL Events\nUsage: node dist/main.js [--config OPTIONS_JSON] [--check-config]\nEnvironment: IPL_OPTIONS_FILE, IPL_CREDENTIAL_DIR, IPL_DATA_DIR\nRead-only observer; UI reports do not prove fresh touches.");
@@ -25,14 +26,16 @@ function main():void {
   log(config.expected_server_name||config.expected_server_ip
     ? "TLS requires CA trust and the configured expected certificate identity"
     : "TLS compatibility mode verifies CA trust only, not processor hostname/IP identity");
-  const app=startApp(config,credentials,{resolveBroker,createPublisher,startTransport,levelEvent,decodeObservation,log});
+  const app=await startExplorerApp(config,credentials,{resolveBroker,
+    createPublisher:(configuration,broker,logger,explorer)=>createPublisher(configuration,broker,logger,{explorer}),
+    startServer:explorer=>startExplorerServer(explorer),startTransport,levelEvent,decodeObservation,log});
   const stop=()=>{void app.stop().finally(()=>process.exit(0));};
   process.once("SIGINT",stop);process.once("SIGTERM",stop);
   void app.ready;
 }
 
-try { main(); } catch(error) {
+void main().catch(error => {
   // Configuration validators use fixed field/error messages and never interpolate values.
   console.error(`[ipl-app] ${error instanceof Error?error.message:"Unable to start IPL app"}`);
   process.exitCode=1;
-}
+});

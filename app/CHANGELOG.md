@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+
+- Add an Ingress Event Explorer with room/category/search filters, live activity, quiet-object browsing and event details.
+- Pause the display, hide repeated values visually, inspect unnamed objects, and copy exact MQTT triggers or disabled automation examples.
+- Keep up to 1000 recent structured reports in memory for display only, with session context and publication-attempt status. Restart clears this history; it is never persisted or replayed to MQTT.
+- Restrict web access to the Supervisor Ingress peer and local loopback, with local embedded assets, read-only endpoints and bounded requests.
+- Preserve existing MQTT identities, payloads, discovery admission, best-effort publication and diagnostic-Ping-only IPL transport.
+
 ## 0.3.0
 
 - Optional private Designer metadata import and exact object name overrides, with numeric names as the fallback.

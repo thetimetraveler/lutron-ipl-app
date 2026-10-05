@@ -1,6 +1,8 @@
 # Lutron IPL Events
 
-Experimental MQTT event entities for configured IPL UI level reports and optional passive discovery of supported observed IPL objects. Add `https://github.com/thetimetraveler/lutron-ipl-app` to the HA OS App store repositories and install **Lutron IPL Events**. Home Assistant Green / HA OS (`aarch64`) is the primary packaging target; `amd64` is also declared. See [DOCS.md](DOCS.md) for installation, separate credentials, supported signals, TLS verification boundaries, and optional automation. This background app is not installed through HACS.
+Experimental MQTT event entities and an Event Explorer for configured IPL UI level reports and optional passive discovery of supported observed IPL objects. Add `https://github.com/thetimetraveler/lutron-ipl-app` to the HA OS App store repositories and install **Lutron IPL Events**. Home Assistant Green / HA OS (`aarch64`) is the primary packaging target; `amd64` is also declared. See [DOCS.md](DOCS.md) for installation, separate credentials, supported signals, TLS verification boundaries, and optional automation. This HA OS app is not installed through HACS.
+
+Click **Open Web UI** after starting the app to explore activity by room, report category and object. The explorer includes search, pause, changes-only and unnamed-object filters, latest report details, and copyable MQTT triggers. Its last 1000 reports are held in memory for display only and disappear on restart; they are never replayed to MQTT or installed as automations.
 
 `auto_discover` defaults to `false`; enable it to create generic entities from supported reports as they arrive. Silent objects cannot be discovered, and numeric object identities do not supply device or room names. Existing manual UI mappings retain their identities and suppress matching automatic UI entities.
 

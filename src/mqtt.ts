@@ -3,7 +3,8 @@ import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readSy
 import { join } from 'node:path';
 import { connect, type IClientOptions } from 'mqtt';
 import { describeObject, validateObservedObject } from './observations.js';
-import {createNameResolver} from './naming.js';
+import {createNameSnapshot, type NameSnapshot} from './naming.js';
+import type {Explorer} from './explorer.js';
 import type { AppConfig, Broker, IplFrame, LevelEvent, ObservedObject, ObservationEvent, Publisher } from './contracts.js';
 
 export interface ClientLike {
@@ -16,6 +17,8 @@ export interface ClientLike {
   end(force?: boolean, callback?: () => void): unknown;
 }
 export interface PublisherOptions {
+  explorer?: Explorer;
+  namingSnapshot?: NameSnapshot;
   clientFactory?: (url: string, options: IClientOptions) => ClientLike;
   maxInflight?: number;
   maxBufferedBytes?: number;
@@ -64,7 +67,10 @@ export function createPublisher(config: AppConfig, broker: Broker, log: (message
   const mappings = new Map(config.mappings.map(m => [m.id, m]));
   const discovery = new Map<string, string>();
   const device = { identifiers: [`${uniquePrefix}app`], name: `Lutron IPL ${config.instance_id}`, manufacturer: 'Lutron', model: 'Experimental IPL observer' };
-  const resolveName=createNameResolver(config,log);
+  const naming=options.namingSnapshot??options.explorer?.names??createNameSnapshot(config,log);
+  const resolveName=(object:ObservedObject)=>naming.resolve(object).name;
+  // The display is optional and must never affect MQTT/transport control flow.
+  const display=(run:(explorer:Explorer)=>void)=>{try {if(options.explorer)run(options.explorer);} catch {/* Optional display failure is isolated. */}};
   for (const mapping of config.mappings) {
     const id = `${uniquePrefix}${mapping.id}`;
     discovery.set(`${config.discovery_prefix}/event/${id}/config`, JSON.stringify({
@@ -103,6 +109,7 @@ export function createPublisher(config: AppConfig, broker: Broker, log: (message
   const autoTopic = (id: string) => `${config.discovery_prefix}/event/${uniquePrefix}auto/${id}/config`;
   const addDiscovery = (object: ObservedObject) => {
     const descriptor = describeObject(object)!;
+    display(explorer=>explorer.registerAuto(object));
     discovery.set(autoTopic(descriptor.id), JSON.stringify({
       name: `${resolveName(object)} (experimental)`, unique_id: `${uniquePrefix}auto:${descriptor.id}`,
       object_id: `${uniquePrefix}auto_${descriptor.id}`, state_topic: `${root}/auto/${descriptor.id}/event`,
@@ -162,7 +169,7 @@ export function createPublisher(config: AppConfig, broker: Broker, log: (message
     if (drainTimer) clearTimeout(drainTimer); drainTimer = undefined;
   };
   const resetSocket = () => {
-    ready = false; clearPending();
+    ready = false; clearPending(); display(explorer=>explorer.setHealth('mqtt',false));
     try { if (client.stream) client.stream.destroy(); else client.end(true); } catch { log('[mqtt] socket reset failed'); }
   };
   const canWrite = () => !stopped && ready && client.connected && inflight < limit && (client.stream?.writableLength ?? 0) < bufferLimit;
@@ -174,13 +181,13 @@ export function createPublisher(config: AppConfig, broker: Broker, log: (message
     const timer = setTimeout(() => {
       timers.delete(timer);
       if (completed || current !== generation) return;
-      counters.writeTimeouts++; log('[mqtt] publish timed out; resetting socket'); resetSocket();
+      counters.writeTimeouts++; display(explorer=>explorer.setDiagnostics({...counters})); log('[mqtt] publish timed out; resetting socket'); resetSocket();
     }, timeout);
     timer.unref(); timers.add(timer);
     const callback = (error?: Error) => {
       if (completed || current !== generation) return;
       completed = true; clearTimeout(timer); timers.delete(timer); inflight--;
-      if (error) { failed = true; counters.publishErrors++; log('[mqtt] publish failed'); }
+      if (error) { failed = true; counters.publishErrors++; display(explorer=>explorer.setDiagnostics({...counters})); log('[mqtt] publish failed'); }
       done?.(!error); drain();
     };
     try { client.publish(topic, payload, { retain, qos: 0 }, callback); }
@@ -209,7 +216,7 @@ export function createPublisher(config: AppConfig, broker: Broker, log: (message
     if (controls.length && !drainTimer) {
       drainTimer = setTimeout(() => {
         drainTimer = undefined;
-        if (now() - controlsSince >= timeout) { counters.writeTimeouts++; log('[mqtt] retained publication congested; resetting socket'); resetSocket(); }
+        if (now() - controlsSince >= timeout) { counters.writeTimeouts++; display(explorer=>explorer.setDiagnostics({...counters})); log('[mqtt] retained publication congested; resetting socket'); resetSocket(); }
         else drain();
       }, 25); drainTimer.unref();
     }
@@ -227,12 +234,12 @@ export function createPublisher(config: AppConfig, broker: Broker, log: (message
     batchRemaining = controls.length; controlsSince = now(); drain();
   }
   client.on('error', () => log('[mqtt] connection error'));
-  client.on('close', () => { ready = false; clearPending(); log('[mqtt] disconnected'); });
-  client.on('offline', () => { ready = false; clearPending(); });
+  client.on('close', () => { ready = false; clearPending(); display(explorer=>explorer.setHealth('mqtt',false)); log('[mqtt] disconnected'); });
+  client.on('offline', () => { ready = false; clearPending(); display(explorer=>explorer.setHealth('mqtt',false)); });
   client.on('reconnect', () => { if (client.options) client.options.reconnectPeriod = Math.min((client.options.reconnectPeriod ?? 1000) * 2, 30_000); });
   client.on('connect', () => {
     if (stopped) return;
-    clearPending(); ready = true;
+    clearPending(); ready = true; display(explorer=>explorer.setHealth('mqtt',true));
     if (client.options) client.options.reconnectPeriod = 1000;
     log('[mqtt] connected');
     try { client.subscribe(config.ha_birth_topic, { qos: 0 }, error => { if (error) log('[mqtt] HA birth subscription failed'); }); }
@@ -244,19 +251,22 @@ export function createPublisher(config: AppConfig, broker: Broker, log: (message
   });
   let stopPromise: Promise<void> | undefined;
   const dropped = (key: 'droppedLevels' | 'droppedDebug' | 'droppedObservations') => {
-    counters[key]++;
+    counters[key]++; display(explorer=>explorer.setDiagnostics({...counters}));
     if (counters[key] === 1 || counters[key] % 100 === 0) log(`[mqtt] ${key}=${counters[key]}`);
     return false;
   };
   return {
     diagnostics: () => ({ ...counters }),
     setIplHealth(value) {
+      display(explorer=>explorer.setHealth('ipl',value));
       if (stopped || healthy === value) return; healthy = value;
       if (ready && client.connected) announce();
     },
     publishLevel(mappingId: string, event: LevelEvent) {
       if (!mappings.has(mappingId)) return dropped('droppedLevels');
-      return send(`${root}/${mappingId}/event`, JSON.stringify(event), false) || dropped('droppedLevels');
+      const accepted=send(`${root}/${mappingId}/event`, JSON.stringify(event), false) || dropped('droppedLevels');
+      if(!stopped)display(explorer=>explorer.report(`manual:${mappingId}`,event,accepted));
+      return accepted;
     },
     publishObservation(event: ObservationEvent) {
       if (!config.auto_discover || stopped) return false;
@@ -266,7 +276,8 @@ export function createPublisher(config: AppConfig, broker: Broker, log: (message
       if (suppressed(object)) return false;
       const time = now();
       if (time - observationWindow >= 1000 || time < observationWindow) { observationWindow = time; observationCount = 0; }
-      if (observationCount >= 50) return dropped('droppedObservations');
+      const finish=(accepted:boolean)=>{display(explorer=>explorer.report(descriptor.id,event,accepted));return accepted;};
+      if (observationCount >= 50) return finish(dropped('droppedObservations'));
       if (!registry.has(descriptor.id)) {
         const cap = config.max_discovered_objects ?? 128;
         // Restored quiet objects survive a lowered cap. Pending removals still
@@ -278,7 +289,7 @@ export function createPublisher(config: AppConfig, broker: Broker, log: (message
         announce();
       }
       observationCount++;
-      return send(`${root}/auto/${descriptor.id}/event`, JSON.stringify(event), false) || dropped('droppedObservations');
+      return finish(send(`${root}/auto/${descriptor.id}/event`, JSON.stringify(event), false) || dropped('droppedObservations'));
     },
     publishDebug(frame: IplFrame, sessionId: string) {
       if (!config.publish_debug) return false;
@@ -290,7 +301,7 @@ export function createPublisher(config: AppConfig, broker: Broker, log: (message
     },
     stop() {
       if (stopPromise) return stopPromise;
-      stopped = true; ready = false; clearPending();
+      stopped = true; ready = false; clearPending(); display(explorer=>explorer.setHealth('mqtt',false));
       if (client.options) client.options.reconnectPeriod = 0;
       stopPromise = new Promise(resolve => {
         let finishing = false;

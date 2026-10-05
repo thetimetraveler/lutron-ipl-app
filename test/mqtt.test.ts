@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { test, type TestContext } from 'node:test';
 import type { AppConfig, LevelEvent, IplFrame, ObservationEvent } from '../src/contracts.js';
 import { createPublisher, type ClientLike, type PublisherOptions } from '../src/mqtt.js';
+import { createExplorer } from '../src/explorer.js';
 
 class FakeClient extends EventEmitter implements ClientLike {
   connected = false;
@@ -339,4 +340,24 @@ test('names update retained discovery in place across restart without replay or 
   const overridden=fixture(t,{auto_discover:true,credential_dir:dir,metadata_file:'names.json',data_dir:initial.config.data_dir,name_overrides:[{...object,name:'My button'}]});overridden.client.connect();
   assert.equal(JSON.parse(autoConfigs(overridden)[0].payload).name,'My button (experimental)');
   assert.equal(JSON.parse(overridden.client.writes.find(w=>w.topic.includes('/event/')&&!w.topic.includes('/auto/'))!.payload).name,'Wall (experimental)');
+});
+
+test('explorer preserves known offline/rate-dropped reports without MQTT replay or unsupported admission',t=>{
+ const explorer=createExplorer({mappings:[],base_topic:'test/ipl',instance_id:'fixture',credential_dir:'/fixture',metadata_file:'',name_overrides:[]} as unknown as AppConfig);
+ const f=fixture(t,{auto_discover:true,mappings:[],max_discovered_objects:1},{explorer});
+ assert.equal(f.publisher.publishObservation!(observation()),false);assert.equal(explorer.snapshot().objects.length,1);assert.equal(explorer.snapshot().events.length,1);
+ f.client.connect();assert.equal(explorer.snapshot().health.mqtt,true);f.client.connected=false;f.client.emit('close');
+ assert.equal(f.publisher.publishObservation!(observation()),false);assert.equal(explorer.snapshot().health.mqtt,false);
+ assert.equal(f.publisher.publishObservation!(observation({object_id:21})),false);assert.equal(f.publisher.publishObservation!(observation({event_type:'unsupported'})),false);assert.equal(explorer.snapshot().objects.length,1);
+ for(let i=0;i<55;i++)f.publisher.publishObservation!(observation());
+ assert.equal(explorer.snapshot().events.length,57);assert.ok(explorer.snapshot().events.every(e=>!e.mqtt_accepted));
+ f.client.connect();f.client.emit('message',f.config.ha_birth_topic,Buffer.from('online'));assert.equal(f.client.writes.filter(w=>w.topic.endsWith('/event')).length,0);assert.equal(explorer.snapshot().events.length,57);
+ assert.equal(explorer.snapshot().diagnostics.droppedObservations,f.publisher.diagnostics().droppedObservations);
+});
+test('optional explorer failure cannot interrupt publication; quiet restored descriptors have no latest report',t=>{
+ const first=fixture(t,{auto_discover:true});first.client.connect();first.publisher.publishObservation!(observation());
+ const explorer=createExplorer(first.config);const restored=fixture(t,{auto_discover:true,data_dir:first.config.data_dir},{explorer});
+ const auto=explorer.snapshot().objects.find(o=>o.object_type===57)!;assert.ok(auto);assert.equal(auto.latest,undefined);assert.equal(explorer.snapshot().events.length,0);
+ const broken={...explorer,report(){throw Error('secret failure');},setHealth(){throw Error('secret failure');},registerAuto(){throw Error('secret failure');},setDiagnostics(){throw Error('secret failure');}};
+ const f=fixture(t,{auto_discover:true},{explorer:broken});f.client.connect();assert.equal(f.publisher.publishLevel('wall',event),true);assert.equal(f.publisher.publishObservation!(observation()),true);
 });

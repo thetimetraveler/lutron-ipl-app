@@ -67,6 +67,10 @@ test('HA app uses read-only credentials, optional MQTT discovery, and ordinary n
   for (const key of ['host_network', 'host_pid', 'docker_api', 'full_access', 'usb', 'uart', 'gpio', 'homeassistant_api']) assert.ok(!config[key], `${key} must not be enabled`);
   assert.equal(config.privileged, undefined);
   assert.equal(config.devices, undefined);
+  assert.equal(config.ingress, true);
+  assert.equal(config.ingress_port, 8099);
+  assert.equal(config.panel_title, 'IPL Events');
+  assert.equal(config.ports, undefined, 'Ingress must not publish a host port');
 });
 
 test('Docker runtime is pinned Node22, explicitly installs OpenSSL, and starts built JS without npm', () => {

@@ -50,16 +50,36 @@ function readNames(root: string, filename: string): ObjectName[] {
   return parseObjectNames(input.objects,true);
 }
 
-/** Load once at process startup; restart to apply a replacement snapshot. */
-export function createNameResolver(config: AppConfig, log: (message:string)=>void = ()=>{}): (object:ObservedObject)=>string {
-  const names=new Map<string,string>();
+export interface ResolvedObjectName { name: string; room: string | null; named: boolean }
+export interface NameSnapshot {
+  resolve(object: ObservedObject): ResolvedObjectName;
+}
+
+/** One validated, private snapshot supplies both MQTT labels and explorer rooms. */
+export function createNameSnapshot(config: AppConfig, log: (message:string)=>void = ()=>{}): NameSnapshot {
+  const names=new Map<string,ResolvedObjectName>();
   if(config.metadata_file) {
     try {
       const objects=readNames(config.credential_dir,config.metadata_file);
-      for(const object of objects) names.set(nameKey(object),object.area_name ? `${object.area_name} / ${object.name}` : object.name);
+      for(const object of objects) names.set(nameKey(object),{
+        name:object.area_name ? `${object.area_name} / ${object.name}` : object.name,
+        room:object.area_name??null,named:true,
+      });
       log(`[naming] imported ${objects.length} object names; snapshot loaded at startup`);
     } catch {log('[naming] metadata unavailable or invalid; using overrides and generic names');}
   }
-  for(const object of parseObjectNames(config.name_overrides??[])) names.set(nameKey(object),object.name);
-  return object => {const descriptor=describeObject(object);if(!descriptor) throw new Error('Invalid named object');return names.get(descriptor.id)??descriptor.name;};
+  for(const object of parseObjectNames(config.name_overrides??[])) {
+    const id=nameKey(object);
+    names.set(id,{name:object.name,room:names.get(id)?.room??null,named:true});
+  }
+  return {resolve(object) {
+    const descriptor=describeObject(object);if(!descriptor) throw new Error('Invalid named object');
+    return {...(names.get(descriptor.id)??{name:descriptor.name,room:null,named:false})};
+  }};
+}
+
+/** Compatible display-name-only API. */
+export function createNameResolver(config: AppConfig, log: (message:string)=>void = ()=>{}): (object:ObservedObject)=>string {
+  const snapshot=createNameSnapshot(config,log);
+  return object=>snapshot.resolve(object).name;
 }
