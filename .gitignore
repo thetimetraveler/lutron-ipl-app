@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+.superpowers/
+.npm-cache/
+options.json
+credentials/
+*.pem
+*.key
+*.crt
+*.bin
+*.ndjson
+.DS_Store

@@ -1,0 +1,26 @@
+{
+  "name": "lutron-ipl-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --import tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node22 --format=esm --packages=bundle --banner:js=\"import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);\" --outfile=dist/main.js",
+    "stage": "npm run build && node scripts/stage.mjs",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "mqtt": "5.15.2"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.0",
+    "esbuild": "0.27.2",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3",
+    "yaml": "2.8.2"
+  }
+}
