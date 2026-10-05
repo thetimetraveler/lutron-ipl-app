@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- Rebuild the release bundle with checkout-local locked dependencies so clean CI builds reproduce the published bundle.
+- Refuse staging from a symlinked dependency directory to prevent checkout-specific dependency paths in future releases.
+
 ## 0.2.0
 
 - Optional passive discovery (`auto_discover: false` by default), with numeric IPL identities and a configurable 1–256 object admission cap (default 128).

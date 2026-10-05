@@ -128,6 +128,23 @@ test('staging refuses existing, symlinked, or incomplete contexts without recurs
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('staging refuses a dependency-directory symlink before creating a package', () => {
+  const { dir, repo } = fixture();
+  try {
+    const dependencies = join(dir, 'shared-node-modules');
+    mkdirSync(dependencies);
+    writeFileSync(join(dependencies, 'keep.txt'), 'shared dependencies');
+    rmSync(join(repo, 'node_modules'), { recursive: true });
+    symlinkSync(dependencies, join(repo, 'node_modules'));
+    const target = join(dir, 'release');
+    const result = stage(repo, target);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /node_modules.*npm ci/);
+    assert.ok(!existsSync(target));
+    assert.equal(readFileSync(join(dependencies, 'keep.txt'), 'utf8'), 'shared dependencies');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('repository child names beginning with two dots do not bypass build-only staging', () => {
   const { dir, repo } = fixture();
   try {

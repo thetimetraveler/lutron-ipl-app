@@ -52,6 +52,14 @@ try {
   if (!fromRoot || (!outsideRoot && !fromRoot.startsWith(`build${sep}`))) {
     throw new Error('Inside the repository, stage only into a fresh build/ subdirectory');
   }
+  // esbuild records resolved dependency paths in the bundle. A shared install
+  // outside this checkout makes the release differ from a clean CI build.
+  try {
+    const dependencies = lstatSync(join(root, 'node_modules'));
+    if (dependencies.isSymbolicLink() || !dependencies.isDirectory()) {
+      throw new Error('Unsafe node_modules; install locked dependencies locally with npm ci before staging');
+    }
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
   for (const [source] of inputFiles) regularSource(source);
   regularSource('package.json');
   const packageInfo = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));

@@ -1,5 +1,5 @@
 name: Lutron IPL Events
-version: "0.2.0"
+version: "0.2.1"
 slug: lutron-ipl
 description: Experimental observational IPL reports and passive discovery over MQTT
 arch:
