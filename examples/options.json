@@ -14,6 +14,8 @@
   "discovery_prefix": "homeassistant",
   "ha_birth_topic": "homeassistant/status",
   "publish_debug": false,
+  "auto_discover": false,
+  "max_discovered_objects": 128,
   "mappings": [
     { "id": "example_ui", "name": "Example UI", "device_id": 100, "ui_object_id": 200 }
   ]

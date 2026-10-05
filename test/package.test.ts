@@ -35,14 +35,23 @@ function stage(repo: string, destination?: string) {
 
 test('HA manifest exactly exposes the flat options and nested mapping contract', () => {
   const config = manifest();
-  const expected = ['processor_host', 'processor_port', 'client_cert', 'client_key', 'ca_cert', 'expected_server_name', 'expected_server_ip', 'mqtt_url', 'mqtt_username', 'mqtt_password', 'instance_id', 'base_topic', 'discovery_prefix', 'ha_birth_topic', 'publish_debug', 'mappings'].sort();
+  const expected = ['processor_host', 'processor_port', 'client_cert', 'client_key', 'ca_cert', 'expected_server_name', 'expected_server_ip', 'mqtt_url', 'mqtt_username', 'mqtt_password', 'instance_id', 'base_topic', 'discovery_prefix', 'ha_birth_topic', 'publish_debug', 'auto_discover', 'max_discovered_objects', 'mappings'].sort();
   assert.deepEqual(Object.keys(config.options).sort(), expected);
   assert.deepEqual(Object.keys(config.schema).sort(), expected);
+  assert.equal(config.options.auto_discover, false);
+  assert.equal(config.options.max_discovered_objects, 128);
+  assert.equal(config.schema.auto_discover, 'bool');
+  assert.equal(config.schema.max_discovered_objects, 'int(1,256)');
   assert.deepEqual(config.options.mappings, []);
   assert.deepEqual(config.schema.mappings, [{ id: 'match(^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$)', name: 'str(1,160)', device_id: 'int(1,4294967295)', ui_object_id: 'int(1,4294967295)' }]);
   assert.equal(config.schema.mqtt_password, 'password');
   assert.equal(config.schema.processor_port, 'int(1,65535)');
   assert.equal(config.options.processor_port, 8902);
+  assert.equal(config.version, JSON.parse(read('package.json')).version);
+  const lock = JSON.parse(read('package-lock.json'));
+  assert.equal(config.version, lock.version);
+  assert.equal(config.version, lock.packages[''].version);
+  assert.match(read('app/Dockerfile'), new RegExp(`^ARG BUILD_VERSION=${config.version.replaceAll('.', '\\.')}$`, 'm'));
   assert.deepEqual(Object.keys(JSON.parse(read('examples/options.json'))).sort(), expected);
 });
 
@@ -178,7 +187,7 @@ test('tracked App store release is complete, current, and starts from a detached
   for (const path of ['Dockerfile', 'run.sh', 'README.md', 'DOCS.md', 'CHANGELOG.md']) {
     assert.equal(readFileSync(join(release, path), 'utf8'), read(`app/${path}`), `${path} release is stale`);
   }
-  assert.match(read('lutron-ipl/DOCS.md'), /\/addon_configs\/<repository-id>_lutron-ipl/);
+  assert.match(read('lutron-ipl/DOCS.md'), /\/app_configs\/<full-app-slug>/);
   const dir = mkdtempSync(join(realpathSync(tmpdir()), 'ipl-release-runtime-'));
   try {
     const detached = join(dir, 'app');

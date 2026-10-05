@@ -1,7 +1,7 @@
 name: Lutron IPL Events
-version: "0.1.0"
+version: "0.2.0"
 slug: lutron-ipl
-description: Experimental observational IPL UI level reports over MQTT
+description: Experimental observational IPL reports and passive discovery over MQTT
 arch:
   - aarch64
   - amd64
@@ -33,6 +33,8 @@ options:
   discovery_prefix: homeassistant
   ha_birth_topic: homeassistant/status
   publish_debug: false
+  auto_discover: false
+  max_discovered_objects: 128
   mappings: []
 schema:
   processor_host: str
@@ -50,6 +52,8 @@ schema:
   discovery_prefix: match(^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$)
   ha_birth_topic: match(^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$)
   publish_debug: bool
+  auto_discover: bool
+  max_discovered_objects: int(1,256)
   mappings:
     - id: match(^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$)
       name: str(1,160)
