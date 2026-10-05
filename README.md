@@ -6,6 +6,8 @@ This service observes the authenticated IPL stream. It does not change Lutron pr
 
 ## Install through the HA App store
 
+[Add this repository to Home Assistant](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fthetimetraveler%2Flutron-ipl-app)
+
 In Home Assistant, open Settings → Apps → App store → menu → Repositories (older releases say Add-ons). Add this repository URL:
 
 ```text
@@ -65,6 +67,8 @@ docker run --rm --name lutron-ipl \
 Ordinary container networking is used. Standalone mode requires an explicit broker; Supervisor discovery only exists in HA OS. For direct Node execution, set `IPL_OPTIONS_FILE`, `IPL_CREDENTIAL_DIR`, and `IPL_DATA_DIR` to your separate local paths, then run `node dist/main.js`; `--config /path/to/options.json` is also supported. Keep secrets outside the repository and build context.
 
 ## Verification boundaries
+
+The [initial GitHub CI run](https://github.com/thetimetraveler/lutron-ipl-app/actions/runs/37276359612) passed all 70 tests, typecheck, bundle consistency, and ARM64/AMD64 container image builds. This verifies image construction, not installation or runtime behavior on Green.
 
 Offline parser, transport, publisher, and packaging tests are the local checks. Packaging tests use an isolated synthetic runtime so they can verify staging without connecting to any household device. No Docker executable is available in this development environment: the image has not been built/run locally, installed on Green, or verified against live HA/MQTT. Declared architectures and the pinned base's architecture metadata do not constitute hardware testing.
 

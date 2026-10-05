@@ -37,3 +37,7 @@ CI uses read-only repository permissions, SHA-pinned official actions, locked de
 - `git diff --check`: passed.
 
 Local verification used Node **22.17.1**; CI/container specify **22.23.3**. Docker is absent locally. Successful CI image builds, container execution, Supervisor installation, actual Green behavior, and live MQTT/HA delivery remain separate unverified steps. No further physical tests are required to accept this observational implementation.
+
+## Coordinator handoff after review
+
+Published the authorized public repository at https://github.com/thetimetraveler/lutron-ipl-app. Independent local checkout: `/Users/asingh/projects/lutron-ipl-app`. All 70 tests, typecheck, build, and release consistency checks passed again after relocation. Copied license text whitespace was normalized without changing its wording; committed diff check passed. [Initial CI](https://github.com/thetimetraveler/lutron-ipl-app/actions/runs/37276359612) passed locked installation, tests/typecheck/build/bundle comparison and ARM64/AMD64 image construction. Green installation, container runtime, and live MQTT/HA delivery remain unverified.
