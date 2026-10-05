@@ -1,0 +1,20 @@
+{
+  "processor_host": "processor.example.invalid",
+  "processor_port": 8902,
+  "client_cert": "ipl_client_cert.pem",
+  "client_key": "ipl_client_key.pem",
+  "ca_cert": "processor_ca.pem",
+  "expected_server_name": "",
+  "expected_server_ip": "",
+  "mqtt_url": "",
+  "mqtt_username": "",
+  "mqtt_password": "",
+  "instance_id": "example",
+  "base_topic": "lutron_ipl",
+  "discovery_prefix": "homeassistant",
+  "ha_birth_topic": "homeassistant/status",
+  "publish_debug": false,
+  "mappings": [
+    { "id": "example_ui", "name": "Example UI", "device_id": 100, "ui_object_id": 200 }
+  ]
+}

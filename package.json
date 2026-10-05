@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "build": "esbuild src/main.ts --bundle --platform=node --target=node22 --format=esm --packages=bundle --banner:js=\"import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);\" --outfile=dist/main.js",
     "stage": "npm run build && node scripts/stage.mjs",
-    "start": "node dist/main.js"
+    "start": "node dist/main.js",
+    "package:release": "npm run build && node scripts/package-release.mjs"
   },
   "dependencies": {
     "mqtt": "5.15.2"

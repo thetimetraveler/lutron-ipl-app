@@ -1,0 +1,27 @@
+# OPTIONAL: manually create, replace both entities, review, and enable yourself.
+# This can also react to a cached UI report after IPL reconnect. Receipt time
+# cannot prove a fresh touch; readiness checks below cannot resolve that ambiguity.
+alias: Example IPL UI report to light (experimental)
+description: Opt-in example using a received UI report's level; not gesture detection.
+initial_state: false
+mode: restart
+triggers:
+  - trigger: state
+    entity_id: event.replace_with_actual_ipl_ui_entity
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.from_state is not none and trigger.to_state is not none
+         and trigger.from_state.state not in ['unknown', 'unavailable']
+         and trigger.to_state.state not in ['unknown', 'unavailable']
+         and trigger.from_state.state != trigger.to_state.state
+         and trigger.to_state.attributes.get('event_type') == 'level_adjustment'
+         and trigger.to_state.attributes.get('source_kind') == 'ui_level_report'
+         and is_number(trigger.to_state.attributes.get('level'))
+         and 0 <= (trigger.to_state.attributes.get('level') | float) <= 100 }}
+actions:
+  - action: light.turn_on
+    target:
+      entity_id: light.replace_with_chosen_target
+    data:
+      brightness_pct: "{{ trigger.to_state.attributes.level | float | round(0) | int }}"

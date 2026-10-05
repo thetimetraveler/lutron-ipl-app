@@ -1,0 +1,49 @@
+# Task 2 implementation report
+
+Implemented `src/mqtt.ts`, `src/supervisor.ts`, `test/mqtt.test.ts`, and `test/supervisor.test.ts`. No other service modules or shared contracts were changed by this task. No household connections, real credentials, commits, or agent spawning were used.
+
+## Public interfaces
+
+`createPublisher(config, broker, log?)` returns the existing Publisher contract. An optional fourth `PublisherOptions` argument injects a client factory, clock, and bounds for offline tests. The returned value also exposes `diagnostics()`, a snapshot with refused level/debug observation counts, publication errors, and socket-reset write timeouts. Runtime callers do not need the extra argument or diagnostics method.
+
+`resolveBroker(config, { token?, fetchImpl?, log? }?)` returns `Promise<Broker | null>` with the exact shared Broker shape. Explicit `mqtt_url` always wins; Supervisor requests never run for an explicit broker or absent token. Broker-discovery retry policy remains in the root runtime.
+
+## MQTT behavior
+
+The publication topic root is `${base_topic}/${instance_id}`. App availability uses `/availability`, retained IPL connection state uses `/ipl_health`, decoded-frame diagnostics use `/debug`, and each event mapping uses `/${mapping.id}/event`.
+
+Both the MQTT event discovery entities and connection-health binary sensor are announced eagerly on connection. Events have two availability dependencies, app/MQTT and IPL, while the connection-health sensor depends only on app/MQTT availability; it can show disconnected IPL while MQTT is connected. Initial IPL state is offline. The retained app last will is offline. Every event entity name appends `(experimental)` to the supplied mapping display name. Discovery also contains an experimental-observer device model and only the declared `level_adjustment` event type.
+
+Discovery identities use a hash of discovery prefix, base namespace, and instance ID followed by the stable mapping ID. Mapping display-name changes preserve identity and topic. Distinct namespaces/instances remain isolated. Renaming a namespace or instance intentionally establishes a new ownership scope; old discovery in a previous scope is not deleted automatically.
+
+Observations use QoS 0, retain false, clean sessions, `queueQoSZero: false`, and a connected/ready gate. There is no application event cache. Repeated accepted percentages remain separate publications. HA birth subscriptions are established on every connection; birth/reconnect republish current discovery and health, never prior event/debug payloads.
+
+Default bounds are 16 simultaneous write callbacks, 64 KiB projected socket write buffer including the packet to be added, 5 seconds per write, and 20 debug frames per one-second window. Oversized debug payloads and unavailable/congested observations return false and increment refusal counters. Async transport errors/timeouts have separate diagnostic counters; QoS 0 acceptance does not prove broker receipt. A write timeout destroys the current socket, clears callback accounting, and allows MQTT.js reconnect; stale callbacks cannot affect the new generation. Reconnect delay doubles from one second to 30 seconds and resets after connection. Retained control batches replace rather than append on repeated HA births and wait for temporary buffer space without keeping observations.
+
+Discovery inventory is an atomic, mode-0600 app-owned file under `data_dir`, scoped to the hashed owner. Loading validates owner, version, regular-file status, and every discovery topic. Corrupt or unrelated inventory causes cleanup to be skipped as a whole. Removed mappings get retained empty discovery payloads only within this exact owner scope. Inventory is advanced only after the complete retained publication batch finishes successfully; interrupted cleanup is retried on reconnect or the next process run. A local QoS 0 write callback still cannot prove broker durability.
+
+Shutdown publishes retained app offline when connected, disables reconnect, and ends gracefully. At the two-second deadline it explicitly destroys the actual stream and waits for its close event; it does not rely on a second `end(true)` call, which MQTT.js ignores after beginning graceful shutdown. The post-destroy close wait has a separate 250-millisecond fallback, giving a default upper bound of approximately 2.25 seconds plus event-loop scheduling. A stream configured with `emitClose: false`, or one whose custom `_destroy` never invokes its callback, cannot leave the returned stop promise pending indefinitely. The fallback removes its temporary close listener, clears its timer, and emits a fixed close-timeout category. An early graceful callback from a disconnected MQTT client also explicitly closes any still-open stream using the same bounded close wait. Stop is idempotent, rejects further observations, and clears publication timers. Logs report fixed categories/counts rather than interpolating arbitrary broker exception messages, frame contents, tokens, or passwords.
+
+## Supervisor behavior
+
+The request is fixed to `http://supervisor/services/mqtt`, carries the token only in an Authorization header, and uses an AbortSignal. A five-second race covers both fetching headers and parsing the complete response body, including injected implementations that ignore abort. Missing service, non-success HTTP, malformed data, invalid host/port/credential types, request errors, and timeout return null. SSL selects mqtts; IPv6 hosts are bracketed. Empty username/password become undefined. Error logs do not contain response payloads or arbitrary exception messages.
+
+## Verification evidence
+
+Tests were written before the implementation. The initial focused command exited 1 with `ERR_MODULE_NOT_FOUND` for both missing implementation modules (2 failed test files), proving red before source was added.
+
+After implementation, review fixes, and additional congestion/lifecycle checks, `node --import tsx --test test/mqtt.test.ts test/supervisor.test.ts` passed **24/24 tests**, exit 0. Covered eager discovery, explicit entity experimental labels, retain/QoS/session options, last will, availability separation, repeated observations, disconnection drops, HA birth/reconnect without replay, unknown mapping refusal, rename and namespace identity, removed mapping tombstones, corrupt/unrelated inventory, interrupted cleanup, in-flight and projected buffer bounds, slow callback socket reset, stale callbacks, debug rate/default/timestamp/raw payload, shutdown deadline/idempotence, silent-close and stalled-destroy shutdown completion, synchronous publication error counters, explicit broker precedence, missing/invalid Supervisor service, captured secret-safe logs, IPv6 and SSL, and full-response five-second timeout.
+
+The Node 22 MockTimers API emits its expected experimental warning for the Supervisor deadline test. No failing tests remain in this task. A final `./node_modules/.bin/tsc --noEmit` returned exit 0 after the concurrently implemented runtime became available.
+
+## Independent review fixes
+
+The scoped review at `.superpowers/sdd/implementation-plan/task-2-review.md` identified a P1 shutdown defect and P2 missing entity-level experimental label. Both are fixed. Regressions were added before their implementation changes: the focused suite returned exit 1 with **3 failures**, checking ordinary/renamed mapping labels and the real MQTT.js stalled-stream shutdown. The shutdown regression instantiates the installed `MqttClient` over a synthetic stalled `Duplex`, injects a synthetic CONNACK packet, begins graceful shutdown, waits for the configured deadline, and verifies the actual stream is destroyed/closed, reconnect is disabled with no timer, repeated stop returns the same promise, and post-stop events are refused. It performs no network or household call.
+
+The label regression begins with a plain `Wall` mapping name and expects `Wall (experimental)`, then verifies a rename produces `Renamed (experimental)` while retaining the discovery topic and unique ID. Review's non-blocking improvements were also addressed: MQTT logs are now captured and checked against arbitrary secret-bearing exception content, and Supervisor tests cover stalled headers and abort-respecting fetch rejection in addition to stalled response bodies.
+
+Scoped re-review identified that waiting only for `close` after destruction could still leave stop pending indefinitely for nonstandard streams. Two additional real-MQTT.js synthetic-stream regressions were written first, using `emitClose: false` and a custom `_destroy` that never completes. Before the fix they returned exit 1 with **22 passing and 2 failing tests**; both remained pending past the test guard. The bounded 250-millisecond close fallback now resolves both, confirms destruction was attempted, cleans up the temporary close listener, and emits only a static timeout message. The ordinary real-client shutdown test continues to assert actual normal stream closure and disabled reconnect. Final focused verification is **24/24 green**, and final full-project TypeScript verification exits 0.
+
+## Limits and follow-up
+
+These checks use injected clients, a real MQTT.js client over a synthetic Duplex, and fake fetch responses, not a live broker, Supervisor, HA entity registry, or household IPL endpoint. Live HA installation and event delivery remain separate verification. The publication contract is best effort: no app/MQTT replay, no exactly-once claim, and no ability to distinguish a processor-side initial report from a fresh adjustment. Configuration validation and the 30-second missing-broker retry are root-owned. The MQTT inventory file is trusted only within its explicit owner namespace; moving namespaces requires deliberate operator cleanup of the old namespace if wanted.

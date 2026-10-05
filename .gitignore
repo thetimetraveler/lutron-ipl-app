@@ -11,3 +11,9 @@ credentials/
 *.bin
 *.ndjson
 .DS_Store
+
+# Public app build context and synthetic configuration examples
+!examples/options.json
+!lutron-ipl/dist/
+!lutron-ipl/dist/main.js
+!lutron-ipl/examples/options.json

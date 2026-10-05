@@ -1,0 +1,57 @@
+name: Lutron IPL Events
+version: "0.1.0"
+slug: lutron-ipl
+description: Experimental observational IPL UI level reports over MQTT
+arch:
+  - aarch64
+  - amd64
+startup: application
+boot: manual
+stage: experimental
+init: true
+hassio_api: true
+hassio_role: default
+services:
+  - mqtt:want
+map:
+  - type: addon_config
+    read_only: true
+    path: /config
+options:
+  processor_host: ""
+  processor_port: 8902
+  client_cert: ipl_client_cert.pem
+  client_key: ipl_client_key.pem
+  ca_cert: processor_ca.pem
+  expected_server_name: ""
+  expected_server_ip: ""
+  mqtt_url: ""
+  mqtt_username: ""
+  mqtt_password: ""
+  instance_id: default
+  base_topic: lutron_ipl
+  discovery_prefix: homeassistant
+  ha_birth_topic: homeassistant/status
+  publish_debug: false
+  mappings: []
+schema:
+  processor_host: str
+  processor_port: int(1,65535)
+  client_cert: str
+  client_key: str
+  ca_cert: str
+  expected_server_name: str
+  expected_server_ip: str
+  mqtt_url: str
+  mqtt_username: str
+  mqtt_password: password
+  instance_id: match(^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$)
+  base_topic: match(^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$)
+  discovery_prefix: match(^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$)
+  ha_birth_topic: match(^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$)
+  publish_debug: bool
+  mappings:
+    - id: match(^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$)
+      name: str(1,160)
+      device_id: int(1,4294967295)
+      ui_object_id: int(1,4294967295)
