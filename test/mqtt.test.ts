@@ -316,3 +316,27 @@ test('bounded manual inventory still accepts the longest parser-supported namesp
   const next=fixture(t,{discovery_prefix:first.config.discovery_prefix,mappings:[],data_dir:first.config.data_dir});next.client.connect();
   assert.equal(next.client.writes.filter(write=>write.payload==='').length,256);
 });
+
+test('names update retained discovery in place across restart without replay or changing manual names', t=>{
+  const dir=mkdtempSync(join(tmpdir(),'ipl-metadata-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  const file=join(dir,'names.json');
+  const object={system_id:1,object_type:57,object_id:20};
+  writeFileSync(file,JSON.stringify({version:1,objects:[{...object,name:'Scene button',area_name:'Example room'},{...object,object_id:9999,name:'Silent button'}]}));
+  const initial=fixture(t,{auto_discover:true,credential_dir:dir,metadata_file:'names.json'});initial.client.connect();
+  initial.publisher.publishObservation!(observation());
+  const original=autoConfigs(initial)[0], before=JSON.parse(original.payload);
+  assert.equal(autoConfigs(initial).length,1);
+  assert.equal(before.name,'Example room / Scene button (experimental)');
+  assert.equal(initial.client.writes.find(w=>w.topic.endsWith('/event'))!.options.retain,false);
+  writeFileSync(file,JSON.stringify({version:1,objects:[{...object,name:'Renamed button'}]}));
+  const next=fixture(t,{auto_discover:true,credential_dir:dir,metadata_file:'names.json',data_dir:initial.config.data_dir});next.client.connect();
+  const after=JSON.parse(autoConfigs(next)[0].payload);
+  assert.equal(after.name,'Renamed button (experimental)');
+  assert.equal(autoConfigs(next)[0].topic,original.topic);
+  for(const field of ['unique_id','object_id','state_topic']) assert.equal(after[field],before[field]);
+  for(const field of ['device','event_types','availability','availability_mode']) assert.deepEqual(after[field],before[field]);
+  assert.equal(next.client.writes.filter(w=>w.topic.endsWith('/event')).length,0);
+  const overridden=fixture(t,{auto_discover:true,credential_dir:dir,metadata_file:'names.json',data_dir:initial.config.data_dir,name_overrides:[{...object,name:'My button'}]});overridden.client.connect();
+  assert.equal(JSON.parse(autoConfigs(overridden)[0].payload).name,'My button (experimental)');
+  assert.equal(JSON.parse(overridden.client.writes.find(w=>w.topic.includes('/event/')&&!w.topic.includes('/auto/'))!.payload).name,'Wall (experimental)');
+});

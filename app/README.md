@@ -4,4 +4,6 @@ Experimental MQTT event entities for configured IPL UI level reports and optiona
 
 `auto_discover` defaults to `false`; enable it to create generic entities from supported reports as they arrive. Silent objects cannot be discovered, and numeric object identities do not supply device or room names. Existing manual UI mappings retain their identities and suppress matching automatic UI entities.
 
+Optional `metadata_file` imports private Designer names at startup; `name_overrides` takes precedence over imported names. Names update existing automatic entities in place. See [naming instructions](DOCS.md#naming-discovered-objects) for the snapshot format and offline import tool.
+
 This listener observes the processor's authenticated IPL stream, including supported CCA/CCX-related reports the processor exposes. It provides neither RF sniffing nor complete radio/device coverage. No new hardware is needed for IPL; radio capture would require a separate suitable receiver and tooling. The app cannot control lighting or Sunnata LEDs, establish fresh physical actions from startup/cached/repeated reports, or guarantee MQTT delivery. No automation is installed. Offline checks do not establish live HA/MQTT behavior or physical-device coverage; deployment validation is separate. No extra physical-device tests are prerequisites.

@@ -16,6 +16,8 @@
   "publish_debug": false,
   "auto_discover": false,
   "max_discovered_objects": 128,
+  "metadata_file": "",
+  "name_overrides": [],
   "mappings": [
     { "id": "example_ui", "name": "Example UI", "device_id": 100, "ui_object_id": 200 }
   ]

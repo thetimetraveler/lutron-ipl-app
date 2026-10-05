@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+- Optional private Designer metadata import and exact object name overrides, with numeric names as the fallback.
+- Rename automatic event entities in place while preserving identities, event topics, manual mapping names, device grouping and observation behavior.
+- Bound and validate private snapshots; invalid/unavailable metadata falls back without stopping the listener. Restart to apply a replaced snapshot.
+- Include a SELECT-only Designer query template and an offline import tool requiring an explicitly verified system ID and fresh mode-0600 output.
+
 ## 0.2.1
 
 - Rebuild the release bundle with checkout-local locked dependencies so clean CI builds reproduce the published bundle.

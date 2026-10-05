@@ -32,7 +32,7 @@ The local app code path and separate credential path follow [HA's local app tuto
 
 ## Options
 
-The configuration is flat except for the `mappings` array. `examples/options.json` is a complete synthetic example. HA writes the real options to `/data/options.json`; the writable `/data` also stores app-owned discovery topics and bounded numeric object descriptors, without event payloads, receipt timestamps, or last values. Credential and data directories are controlled by the environment, not exposed as options.
+The configuration is flat except for the `mappings` and `name_overrides` arrays. `examples/options.json` is a complete synthetic example. HA writes the real options to `/data/options.json`; the writable `/data` also stores app-owned discovery topics and bounded numeric object descriptors, without event payloads, receipt timestamps, or last values. Credential and data directories are controlled by the environment, not exposed as options.
 
 | Option | Default / meaning |
 | --- | --- |
@@ -47,14 +47,47 @@ The configuration is flat except for the `mappings` array. `examples/options.jso
 | `base_topic` | `lutron_ipl`; app publication namespace, without wildcards. |
 | `discovery_prefix` | `homeassistant`; must match the HA MQTT integration. |
 | `ha_birth_topic` | `homeassistant/status`; the HA online notification topic. |
-| `auto_discover` | `false`; opt-in passive discovery of supported observed IPL objects. No polling or metadata import. Manual UI mappings suppress matching automatic UI entities. |
+| `auto_discover` | `false`; opt-in passive discovery of supported observed IPL objects. No polling. Manual UI mappings suppress matching automatic UI entities. |
 | `max_discovered_objects` | `128`; integer 1–256, limits admission of new automatic objects. Previously discovered objects remain if you lower the cap, up to the global 256-object bound. |
+| `metadata_file` | Empty; optional private JSON snapshot relative to `/config`, loaded at startup. Naming only; does not create entities or query the processor. |
+| `name_overrides` | `[]`; exact `system_id`, `object_type`, `object_id`, and `name` entries override imported names for automatic entities. Supported object types only; duplicate identities and control characters are rejected. |
 | `publish_debug` | `false`; opt-in unretained decoded frames for **all observed IPL objects**, beyond the UI allowlist. May expose sensitive system metadata; drops under rate/backpressure limits. |
 | `mappings` | `[]`; each entry has stable `id`, nonblank display `name` (up to 160 characters), numeric `device_id`, and numeric `ui_object_id` (each 1–4294967295). IDs/UI objects must be unique. Use observed UI object IDs, not zone IDs. |
 
 Mapping/instance identifiers begin with a letter or digit and contain only letters, digits, `_` or `-`, up to 64 characters. Topic paths contain letters, digits, `_` or `-` in nonempty `/`-separated segments; wildcards and NULs are rejected.
 
 Changing a mapping's display name preserves its identity; changing its stable identifier creates a different entity. Removed mapping discovery is cleared within this app's persisted ownership inventory. Preserve the namespace/instance when updating to allow that cleanup.
+
+## Naming discovered objects
+
+Automatic names use this priority: `name_overrides`, imported metadata, generic numeric IPL name. Existing manual mapping names remain authoritative. Names affect only MQTT discovery display labels; discovery topics, unique IDs, event topics, grouping, and event payloads stay the same. Objects missing from a snapshot keep generic names. Metadata never admits silent objects or changes the discovery cap. HA user-customized names may take precedence over integration names; existing entity IDs are preserved.
+
+Example with invented IDs:
+
+```yaml
+metadata_file: object-metadata.json
+name_overrides:
+  - system_id: 7
+    object_type: 15
+    object_id: 9001
+    name: Kitchen ceiling lights
+```
+
+Put `object-metadata.json` in `/app_configs/<full-app-slug>` alongside the separately stored credentials, then save options and restart the app. The app reads it through its existing read-only `/config` mount. Restart after replacing a snapshot. Missing/invalid metadata logs a fixed error category and falls back to overrides/generic names without stopping observation. Remove the filename and restart to remove imported names; this does not remove entities. The snapshot is not watched or refreshed automatically.
+
+```json
+{"version":1,"source":"designer","generated_at":"2026-10-05T00:00:00Z","objects":[{"system_id":7,"object_type":15,"object_id":9001,"name":"Ceiling lights","area_name":"Kitchen"}]}
+```
+
+`version` and `objects` are required; `source: designer` and `generated_at` are optional provenance. Each object requires the full numeric identity and a nonblank `name` of at most 160 characters; optional `area_name` has the same limit. Imported labels render as `area_name / name`. Snapshot limits are 1 MiB and 4096 records. Unknown fields/types, duplicate composite identities, control characters, nonregular files, and symlinks beneath the config root are rejected. No credentials, radio keys, addresses, event history, MQTT topics, or arbitrary device fields belong in the snapshot. Numeric discovery descriptors remain the only persisted object inventory.
+
+To generate metadata from a Designer project, use the repository's SELECT-only [query template](https://github.com/thetimetraveler/lutron-ipl-app/blob/main/tools/designer-names.sql). Verify the active project matches your processor and check the schema before running it. Save its JSON result privately as `rows.json`. The template covers areas, area-associated occupancy groups, shade groups, zones, dimmer UIs, keypad buttons and load-controller lookup relationships; unmatched families retain generic names. Do not infer IDs by arithmetic or substitute a physical device ID for a UI ID. With repository development dependencies installed, run:
+
+```sh
+node --import tsx tools/import-designer-names.ts --input rows.json --output object-metadata.json --system-id 7
+```
+
+Replace `7` with the verified IPL system ID for this project/processor. The tool requires explicit binding, validates the curated fields, creates a fresh mode-0600 file, and refuses overwrite. Keep both input and output private. After project edits, export a fresh snapshot. The app does not check project freshness against the processor or pair to LEAP.
 
 ## TLS boundary
 
@@ -74,7 +107,7 @@ Discovery and current health are retained. Events/debug are QoS 0, **never retai
 
 ## Passive discovery and supported observations
 
-Enable `auto_discover` to create an MQTT event entity only after a supported report or command observation identifies an object. No metadata import, Designer export, or active object scan is needed. **Silent objects cannot be discovered passively.** Names are generic IPL descriptions with numeric system/type/object identity, not inferred device, room, component, or radio-family names. Identities stay stable across restarts and are distinct across systems and object types. A manual mapping preserves its existing ID/name/event contract and suppresses the matching automatic type-9 UI entity, including a restored descriptor.
+Enable `auto_discover` to create an MQTT event entity only after a supported report or command observation identifies an object. No metadata import, Designer export, or active object scan is required for passive discovery. **Silent objects cannot be discovered passively.** Without naming overrides or a private metadata import, names are generic IPL descriptions with numeric system/type/object identity; device, room, component, and radio-family associations are not inferred. Identities stay stable across restarts and are distinct across systems and object types. A manual mapping preserves its existing ID/name/event contract and suppresses the matching automatic type-9 UI entity, including a restored descriptor.
 
 | Observed object type | Event types and decoded fields |
 | --- | --- |

@@ -3,6 +3,7 @@ import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readSy
 import { join } from 'node:path';
 import { connect, type IClientOptions } from 'mqtt';
 import { describeObject, validateObservedObject } from './observations.js';
+import {createNameResolver} from './naming.js';
 import type { AppConfig, Broker, IplFrame, LevelEvent, ObservedObject, ObservationEvent, Publisher } from './contracts.js';
 
 export interface ClientLike {
@@ -63,6 +64,7 @@ export function createPublisher(config: AppConfig, broker: Broker, log: (message
   const mappings = new Map(config.mappings.map(m => [m.id, m]));
   const discovery = new Map<string, string>();
   const device = { identifiers: [`${uniquePrefix}app`], name: `Lutron IPL ${config.instance_id}`, manufacturer: 'Lutron', model: 'Experimental IPL observer' };
+  const resolveName=createNameResolver(config,log);
   for (const mapping of config.mappings) {
     const id = `${uniquePrefix}${mapping.id}`;
     discovery.set(`${config.discovery_prefix}/event/${id}/config`, JSON.stringify({
@@ -102,7 +104,7 @@ export function createPublisher(config: AppConfig, broker: Broker, log: (message
   const addDiscovery = (object: ObservedObject) => {
     const descriptor = describeObject(object)!;
     discovery.set(autoTopic(descriptor.id), JSON.stringify({
-      name: `${descriptor.name} (experimental)`, unique_id: `${uniquePrefix}auto:${descriptor.id}`,
+      name: `${resolveName(object)} (experimental)`, unique_id: `${uniquePrefix}auto:${descriptor.id}`,
       object_id: `${uniquePrefix}auto_${descriptor.id}`, state_topic: `${root}/auto/${descriptor.id}/event`,
       event_types: descriptor.eventTypes, availability: [{ topic: availability }, { topic: healthTopic }],
       availability_mode: 'all', device,

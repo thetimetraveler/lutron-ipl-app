@@ -7848,7 +7848,7 @@ var require_parser = __commonJS({
     var bl = require_bl();
     var { EventEmitter } = __require("events");
     var Packet = require_packet();
-    var constants2 = require_constants();
+    var constants3 = require_constants();
     var debug = require_src()("mqtt-packet:parser");
     var Parser = class _Parser extends EventEmitter {
       constructor() {
@@ -7889,19 +7889,19 @@ var require_parser = __commonJS({
       }
       _parseHeader() {
         const zero = this._list.readUInt8(0);
-        const cmdIndex = zero >> constants2.CMD_SHIFT;
-        this.packet.cmd = constants2.types[cmdIndex];
+        const cmdIndex = zero >> constants3.CMD_SHIFT;
+        this.packet.cmd = constants3.types[cmdIndex];
         const headerFlags = zero & 15;
-        const requiredHeaderFlags = constants2.requiredHeaderFlags[cmdIndex];
+        const requiredHeaderFlags = constants3.requiredHeaderFlags[cmdIndex];
         if (requiredHeaderFlags != null && headerFlags !== requiredHeaderFlags) {
-          return this._emitError(new Error(constants2.requiredHeaderFlagsErrors[cmdIndex]));
+          return this._emitError(new Error(constants3.requiredHeaderFlagsErrors[cmdIndex]));
         }
-        this.packet.retain = (zero & constants2.RETAIN_MASK) !== 0;
-        this.packet.qos = zero >> constants2.QOS_SHIFT & constants2.QOS_MASK;
+        this.packet.retain = (zero & constants3.RETAIN_MASK) !== 0;
+        this.packet.qos = zero >> constants3.QOS_SHIFT & constants3.QOS_MASK;
         if (this.packet.qos > 2) {
           return this._emitError(new Error("Packet must not have both QoS bits set to 1"));
         }
-        this.packet.dup = (zero & constants2.DUP_MASK) !== 0;
+        this.packet.dup = (zero & constants3.DUP_MASK) !== 0;
         debug("_parseHeader: packet: %o", this.packet);
         this._list.consume(1);
         return true;
@@ -7995,11 +7995,11 @@ var require_parser = __commonJS({
         if (this._list.readUInt8(this._pos) & 1) {
           return this._emitError(new Error("Connect flag bit 0 must be 0, but got 1"));
         }
-        flags.username = this._list.readUInt8(this._pos) & constants2.USERNAME_MASK;
-        flags.password = this._list.readUInt8(this._pos) & constants2.PASSWORD_MASK;
-        flags.will = this._list.readUInt8(this._pos) & constants2.WILL_FLAG_MASK;
-        const willRetain = !!(this._list.readUInt8(this._pos) & constants2.WILL_RETAIN_MASK);
-        const willQos = (this._list.readUInt8(this._pos) & constants2.WILL_QOS_MASK) >> constants2.WILL_QOS_SHIFT;
+        flags.username = this._list.readUInt8(this._pos) & constants3.USERNAME_MASK;
+        flags.password = this._list.readUInt8(this._pos) & constants3.PASSWORD_MASK;
+        flags.will = this._list.readUInt8(this._pos) & constants3.WILL_FLAG_MASK;
+        const willRetain = !!(this._list.readUInt8(this._pos) & constants3.WILL_RETAIN_MASK);
+        const willQos = (this._list.readUInt8(this._pos) & constants3.WILL_QOS_MASK) >> constants3.WILL_QOS_SHIFT;
         if (flags.will) {
           packet.will = {};
           packet.will.retain = willRetain;
@@ -8012,7 +8012,7 @@ var require_parser = __commonJS({
             return this._emitError(new Error("Will QoS must be set to zero when Will Flag is set to 0"));
           }
         }
-        packet.clean = (this._list.readUInt8(this._pos) & constants2.CLEAN_SESSION_MASK) !== 0;
+        packet.clean = (this._list.readUInt8(this._pos) & constants3.CLEAN_SESSION_MASK) !== 0;
         this._pos++;
         packet.keepalive = this._parseNum();
         if (packet.keepalive === -1) return this._emitError(new Error("Packet too short"));
@@ -8065,7 +8065,7 @@ var require_parser = __commonJS({
         if (flags > 1) {
           return this._emitError(new Error("Invalid connack flags, bits 7-1 must be set to 0"));
         }
-        packet.sessionPresent = !!(flags & constants2.SESSIONPRESENT_MASK);
+        packet.sessionPresent = !!(flags & constants3.SESSIONPRESENT_MASK);
         if (this.settings.protocolVersion === 5) {
           if (this._list.length >= 2) {
             packet.reasonCode = this._list.readUInt8(this._pos++);
@@ -8141,13 +8141,13 @@ var require_parser = __commonJS({
               return this._emitError(new Error("Invalid subscribe topic flag bits, bits 7-2 must be 0"));
             }
           }
-          qos = options & constants2.SUBSCRIBE_OPTIONS_QOS_MASK;
+          qos = options & constants3.SUBSCRIBE_OPTIONS_QOS_MASK;
           if (qos > 2) {
             return this._emitError(new Error("Invalid subscribe QoS, must be <= 2"));
           }
-          nl = (options >> constants2.SUBSCRIBE_OPTIONS_NL_SHIFT & constants2.SUBSCRIBE_OPTIONS_NL_MASK) !== 0;
-          rap = (options >> constants2.SUBSCRIBE_OPTIONS_RAP_SHIFT & constants2.SUBSCRIBE_OPTIONS_RAP_MASK) !== 0;
-          rh = options >> constants2.SUBSCRIBE_OPTIONS_RH_SHIFT & constants2.SUBSCRIBE_OPTIONS_RH_MASK;
+          nl = (options >> constants3.SUBSCRIBE_OPTIONS_NL_SHIFT & constants3.SUBSCRIBE_OPTIONS_NL_MASK) !== 0;
+          rap = (options >> constants3.SUBSCRIBE_OPTIONS_RAP_SHIFT & constants3.SUBSCRIBE_OPTIONS_RAP_MASK) !== 0;
+          rh = options >> constants3.SUBSCRIBE_OPTIONS_RH_SHIFT & constants3.SUBSCRIBE_OPTIONS_RH_MASK;
           if (rh > 2) {
             return this._emitError(new Error("Invalid retain handling, must be <= 2"));
           }
@@ -8184,7 +8184,7 @@ var require_parser = __commonJS({
         while (this._pos < this.packet.length) {
           const code = this._list.readUInt8(this._pos++);
           if (this.settings.protocolVersion === 5) {
-            if (!constants2.MQTT5_SUBACK_CODES[code]) {
+            if (!constants3.MQTT5_SUBACK_CODES[code]) {
               return this._emitError(new Error("Invalid suback code"));
             }
           } else {
@@ -8236,7 +8236,7 @@ var require_parser = __commonJS({
           packet.granted = [];
           while (this._pos < this.packet.length) {
             const code = this._list.readUInt8(this._pos++);
-            if (!constants2.MQTT5_UNSUBACK_CODES[code]) {
+            if (!constants3.MQTT5_UNSUBACK_CODES[code]) {
               return this._emitError(new Error("Invalid unsuback code"));
             }
             this.packet.granted.push(code);
@@ -8254,13 +8254,13 @@ var require_parser = __commonJS({
             switch (this.packet.cmd) {
               case "puback":
               case "pubrec":
-                if (!constants2.MQTT5_PUBACK_PUBREC_CODES[packet.reasonCode]) {
+                if (!constants3.MQTT5_PUBACK_PUBREC_CODES[packet.reasonCode]) {
                   return this._emitError(new Error("Invalid " + this.packet.cmd + " reason code"));
                 }
                 break;
               case "pubrel":
               case "pubcomp":
-                if (!constants2.MQTT5_PUBREL_PUBCOMP_CODES[packet.reasonCode]) {
+                if (!constants3.MQTT5_PUBREL_PUBCOMP_CODES[packet.reasonCode]) {
                   return this._emitError(new Error("Invalid " + this.packet.cmd + " reason code"));
                 }
                 break;
@@ -8285,7 +8285,7 @@ var require_parser = __commonJS({
         if (this.settings.protocolVersion === 5) {
           if (this._list.length > 0) {
             packet.reasonCode = this._parseByte();
-            if (!constants2.MQTT5_DISCONNECT_CODES[packet.reasonCode]) {
+            if (!constants3.MQTT5_DISCONNECT_CODES[packet.reasonCode]) {
               this._emitError(new Error("Invalid disconnect reason code"));
             }
           } else {
@@ -8307,7 +8307,7 @@ var require_parser = __commonJS({
           return this._emitError(new Error("Not supported auth packet for this version MQTT"));
         }
         packet.reasonCode = this._parseByte();
-        if (!constants2.MQTT5_AUTH_CODES[packet.reasonCode]) {
+        if (!constants3.MQTT5_AUTH_CODES[packet.reasonCode]) {
           return this._emitError(new Error("Invalid auth reason code"));
         }
         const properties = this._parseProperties();
@@ -8377,9 +8377,9 @@ var require_parser = __commonJS({
         const padding = this._pos ? this._pos : 0;
         while (bytes < maxBytes && padding + bytes < this._list.length) {
           current = this._list.readUInt8(padding + bytes++);
-          value += mul * (current & constants2.VARBYTEINT_MASK);
+          value += mul * (current & constants3.VARBYTEINT_MASK);
           mul *= 128;
-          if ((current & constants2.VARBYTEINT_FIN_MASK) === 0) {
+          if ((current & constants3.VARBYTEINT_FIN_MASK) === 0) {
             result = true;
             break;
           }
@@ -8455,7 +8455,7 @@ var require_parser = __commonJS({
             this._emitError(new Error("Cannot parse property code type"));
             return false;
           }
-          const name = constants2.propertiesCodes[type];
+          const name = constants3.propertiesCodes[type];
           if (!name) {
             this._emitError(new Error("Unknown property"));
             return false;
@@ -8464,7 +8464,7 @@ var require_parser = __commonJS({
             if (!result[name]) {
               result[name] = /* @__PURE__ */ Object.create(null);
             }
-            const currentUserProperty = this._parseByType(constants2.propertiesTypes[name]);
+            const currentUserProperty = this._parseByType(constants3.propertiesTypes[name]);
             if (result[name][currentUserProperty.name]) {
               if (Array.isArray(result[name][currentUserProperty.name])) {
                 result[name][currentUserProperty.name].push(currentUserProperty.value);
@@ -8480,13 +8480,13 @@ var require_parser = __commonJS({
           }
           if (result[name]) {
             if (Array.isArray(result[name])) {
-              result[name].push(this._parseByType(constants2.propertiesTypes[name]));
+              result[name].push(this._parseByType(constants3.propertiesTypes[name]));
             } else {
               result[name] = [result[name]];
-              result[name].push(this._parseByType(constants2.propertiesTypes[name]));
+              result[name].push(this._parseByType(constants3.propertiesTypes[name]));
             }
           } else {
-            result[name] = this._parseByType(constants2.propertiesTypes[name]);
+            result[name] = this._parseByType(constants3.propertiesTypes[name]);
           }
         }
         return result;
@@ -22734,13 +22734,13 @@ var require_ipv4 = __commonJS({
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.Address4 = void 0;
     var common = __importStar(require_common2());
-    var constants2 = __importStar(require_constants4());
+    var constants3 = __importStar(require_constants4());
     var address_error_1 = require_address_error();
-    var isCorrect4 = common.isCorrect(constants2.BITS);
+    var isCorrect4 = common.isCorrect(constants3.BITS);
     var Address4 = class _Address4 {
       constructor(address) {
         this.addressMinusSuffix = "";
-        this.groups = constants2.GROUPS;
+        this.groups = constants3.GROUPS;
         this.parsedAddress = [];
         this.parsedSubnet = "";
         this.subnet = "/32";
@@ -22750,17 +22750,17 @@ var require_ipv4 = __commonJS({
         this.isInSubnet = common.isInSubnet;
         this.isHostInSubnet = common.isHostInSubnet;
         this.address = address;
-        const subnet = constants2.RE_SUBNET_STRING.exec(address);
+        const subnet = constants3.RE_SUBNET_STRING.exec(address);
         if (subnet) {
           this.parsedSubnet = subnet[0].replace("/", "");
           this.subnetMask = parseInt(this.parsedSubnet, 10);
           this.subnet = `/${this.subnetMask}`;
-          if (this.subnetMask < 0 || this.subnetMask > constants2.BITS) {
+          if (this.subnetMask < 0 || this.subnetMask > constants3.BITS) {
             throw new address_error_1.AddressError("Invalid subnet mask.");
           }
-          address = address.replace(constants2.RE_SUBNET_STRING, "");
+          address = address.replace(constants3.RE_SUBNET_STRING, "");
         }
-        const longest = constants2.GROUPS * 4 - 1;
+        const longest = constants3.GROUPS * 4 - 1;
         if (address.length > longest) {
           throw new address_error_1.AddressError(`IPv4 addresses are at most ${longest} characters.`);
         }
@@ -22793,7 +22793,7 @@ var require_ipv4 = __commonJS({
         if (groups.some((group) => /^0\d/.test(group))) {
           throw new address_error_1.AddressError("IPv4 addresses can't have leading zeroes.");
         }
-        if (!address.match(constants2.RE_ADDRESS)) {
+        if (!address.match(constants3.RE_ADDRESS)) {
           throw new address_error_1.AddressError("Invalid IPv4 address.");
         }
         return groups;
@@ -22816,7 +22816,7 @@ var require_ipv4 = __commonJS({
        * address.subnetMask; // 24
        */
       static fromAddressAndMask(address, mask) {
-        const bits = common.prefixLengthFromMask(new _Address4(mask).bigInt(), constants2.BITS);
+        const bits = common.prefixLengthFromMask(new _Address4(mask).bigInt(), constants3.BITS);
         return new _Address4(`${address}/${bits}`);
       }
       /**
@@ -22830,9 +22830,9 @@ var require_ipv4 = __commonJS({
        */
       static fromAddressAndWildcardMask(address, wildcardMask) {
         const wildcard = new _Address4(wildcardMask).bigInt();
-        const allOnes = (BigInt(1) << BigInt(constants2.BITS)) - BigInt(1);
+        const allOnes = (BigInt(1) << BigInt(constants3.BITS)) - BigInt(1);
         const mask = wildcard ^ allOnes;
-        const bits = common.prefixLengthFromMask(mask, constants2.BITS);
+        const bits = common.prefixLengthFromMask(mask, constants3.BITS);
         return new _Address4(`${address}/${bits}`);
       }
       /**
@@ -22850,7 +22850,7 @@ var require_ipv4 = __commonJS({
        */
       static fromWildcard(input) {
         const groups = input.split(".");
-        if (groups.length !== constants2.GROUPS) {
+        if (groups.length !== constants3.GROUPS) {
           throw new address_error_1.AddressError("Wildcard pattern must have 4 octets");
         }
         let firstWildcard = -1;
@@ -22865,7 +22865,7 @@ var require_ipv4 = __commonJS({
         }
         const trailing = firstWildcard === -1 ? 0 : groups.length - firstWildcard;
         const replaced = groups.map((g) => g === "*" ? "0" : g);
-        const subnetBits = constants2.BITS - trailing * 8;
+        const subnetBits = constants3.BITS - trailing * 8;
         return new _Address4(`${replaced.join(".")}/${subnetBits}`);
       }
       /**
@@ -22911,7 +22911,7 @@ var require_ipv4 = __commonJS({
        * address.correctForm(); // '192.0.2.42'
        */
       static fromArpa(arpaFormAddress) {
-        const longest = constants2.GROUPS * 4 - 1 + "/32".length + ".in-addr.arpa.".length;
+        const longest = constants3.GROUPS * 4 - 1 + "/32".length + ".in-addr.arpa.".length;
         if (arpaFormAddress.length > longest) {
           throw new address_error_1.AddressError(`in-addr.arpa names are at most ${longest} characters.`);
         }
@@ -22942,7 +22942,7 @@ var require_ipv4 = __commonJS({
       toGroup6() {
         const output = [];
         let i;
-        for (i = 0; i < constants2.GROUPS; i += 2) {
+        for (i = 0; i < constants3.GROUPS; i += 2) {
           output.push(`${common.stringToPaddedHex(this.parsedAddress[i])}${common.stringToPaddedHex(this.parsedAddress[i + 1])}`);
         }
         return output.join(":");
@@ -22959,7 +22959,7 @@ var require_ipv4 = __commonJS({
        * @returns {bigint}
        */
       _startAddress() {
-        return BigInt(`0b${this.mask() + "0".repeat(constants2.BITS - this.subnetMask)}`);
+        return BigInt(`0b${this.mask() + "0".repeat(constants3.BITS - this.subnetMask)}`);
       }
       /**
        * The first address in the range given by this address' subnet.
@@ -22989,7 +22989,7 @@ var require_ipv4 = __commonJS({
        * new Address4('10.0.0.0/24').offset(1).correctForm(); // '10.0.0.1'
        */
       offset(n) {
-        return _Address4.fromBigInt(common.offsetBigInt(this.bigInt(), n, constants2.BITS, "IPv4")).withSubnetMask(this.subnetMask);
+        return _Address4.fromBigInt(common.offsetBigInt(this.bigInt(), n, constants3.BITS, "IPv4")).withSubnetMask(this.subnetMask);
       }
       /**
        * Returns the network that follows this address's network: the address after
@@ -23000,7 +23000,7 @@ var require_ipv4 = __commonJS({
        * new Address4('10.0.0.0/24').nextNetwork().networkForm(); // '10.0.1.0/24'
        */
       nextNetwork() {
-        return _Address4.fromBigInt(common.offsetBigInt(this._endAddress(), 1, constants2.BITS, "IPv4")).withSubnetMask(this.subnetMask);
+        return _Address4.fromBigInt(common.offsetBigInt(this._endAddress(), 1, constants3.BITS, "IPv4")).withSubnetMask(this.subnetMask);
       }
       withSubnetMask(subnetMask) {
         return new _Address4(`${this.correctForm()}/${subnetMask}`);
@@ -23010,7 +23010,7 @@ var require_ipv4 = __commonJS({
        * @returns {bigint}
        */
       _endAddress() {
-        return BigInt(`0b${this.mask() + "1".repeat(constants2.BITS - this.subnetMask)}`);
+        return BigInt(`0b${this.mask() + "1".repeat(constants3.BITS - this.subnetMask)}`);
       }
       /**
        * The last address in the range given by this address' subnet
@@ -23035,7 +23035,7 @@ var require_ipv4 = __commonJS({
        * @returns {Address4}
        */
       subnetMaskAddress() {
-        return _Address4.fromBigInt(BigInt(`0b${"1".repeat(this.subnetMask)}${"0".repeat(constants2.BITS - this.subnetMask)}`));
+        return _Address4.fromBigInt(BigInt(`0b${"1".repeat(this.subnetMask)}${"0".repeat(constants3.BITS - this.subnetMask)}`));
       }
       /**
        * The Cisco-style wildcard mask, e.g. `0.0.0.255` for a `/24`. This is
@@ -23044,7 +23044,7 @@ var require_ipv4 = __commonJS({
        * @returns {Address4}
        */
       wildcardMask() {
-        return _Address4.fromBigInt(BigInt(`0b${"0".repeat(this.subnetMask)}${"1".repeat(constants2.BITS - this.subnetMask)}`));
+        return _Address4.fromBigInt(BigInt(`0b${"0".repeat(this.subnetMask)}${"1".repeat(constants3.BITS - this.subnetMask)}`));
       }
       /**
        * The network address in CIDR string form, e.g. `192.168.1.0/24` for
@@ -23225,7 +23225,7 @@ var require_ipv4 = __commonJS({
        */
       binaryZeroPad() {
         if (this._binaryZeroPad === void 0) {
-          this._binaryZeroPad = this.bigInt().toString(2).padStart(constants2.BITS, "0");
+          this._binaryZeroPad = this.bigInt().toString(2).padStart(constants3.BITS, "0");
         }
         return this._binaryZeroPad;
       }
@@ -23240,7 +23240,7 @@ var require_ipv4 = __commonJS({
        */
       groupForV6() {
         const segments = this.parsedAddress;
-        return this.correctForm().replace(constants2.RE_ADDRESS, `<span class="hover-group group-v4 group-6">${segments.slice(0, 2).join(".")}</span>.<span class="hover-group group-v4 group-7">${segments.slice(2, 4).join(".")}</span>`);
+        return this.correctForm().replace(constants3.RE_ADDRESS, `<span class="hover-group group-v4 group-6">${segments.slice(0, 2).join(".")}</span>.<span class="hover-group group-v4 group-7">${segments.slice(2, 4).join(".")}</span>`);
       }
     };
     exports.Address4 = Address4;
@@ -23262,7 +23262,7 @@ var require_ipv4 = __commonJS({
     ];
     var BENCHMARKING_V4 = new Address4("198.18.0.0/15");
     var RESERVED_V4 = new Address4("240.0.0.0/4");
-    var SPECIAL_PURPOSE_V4 = constants2.SPECIAL_PURPOSE.map(([cidr, , reachable]) => ({
+    var SPECIAL_PURPOSE_V4 = constants3.SPECIAL_PURPOSE.map(([cidr, , reachable]) => ({
       subnet: new Address4(cidr),
       reachable
     }));
@@ -26563,9 +26563,181 @@ var require_build2 = __commonJS({
 
 // src/config.ts
 import { X509Certificate, createPrivateKey, createPublicKey } from "node:crypto";
-import { readFileSync, realpathSync } from "node:fs";
+import { readFileSync, realpathSync as realpathSync2 } from "node:fs";
 import { isIP } from "node:net";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute as isAbsolute2, join as join2, relative, resolve } from "node:path";
+
+// src/naming.ts
+import { constants, closeSync, fstatSync, lstatSync, openSync, readSync, realpathSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
+
+// src/observations.ts
+var LEVEL_MAX = 65279;
+var OBJECTS = {
+  2: { label: "Area", eventTypes: ["occupancy_report", "scene_selection_report", "area_lighting_report"] },
+  3: { label: "Load Controller", eventTypes: ["load_level_report", "current_level_report"] },
+  9: { label: "UI", eventTypes: ["ui_level_report"] },
+  15: { label: "Zone", eventTypes: ["zone_level_report", "go_to_level_observed"] },
+  38: { label: "Occupancy Group", eventTypes: ["occupancy_report"] },
+  57: { label: "Button", eventTypes: ["button_press_report", "button_release_report"] },
+  66: { label: "Object Type 66", eventTypes: ["occupancy_report"] },
+  133: { label: "Shade Group", eventTypes: ["scene_selection_report"] },
+  198: { label: "Shade Object", eventTypes: ["shade_level_report"] }
+};
+function integerInRange(value, min, max) {
+  return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
+}
+function validateObservedObject(input) {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) return null;
+  const prototype = Object.getPrototypeOf(input);
+  if (prototype !== Object.prototype && prototype !== null) return null;
+  const keys = Reflect.ownKeys(input);
+  const expected = ["system_id", "object_type", "object_id"];
+  if (keys.length !== expected.length || expected.some((key) => !keys.includes(key))) return null;
+  const values = expected.map((key) => Object.getOwnPropertyDescriptor(input, key));
+  if (values.some((value) => !value || !("value" in value))) return null;
+  const [system, type, object3] = values.map((value) => value.value);
+  if (!integerInRange(system, 0, 65535) || !integerInRange(type, 0, 65535) || !integerInRange(object3, 1, 4294967295) || !Object.hasOwn(OBJECTS, type)) return null;
+  return { system_id: system, object_type: type, object_id: object3 };
+}
+function describeObject(object3) {
+  const valid = validateObservedObject(object3);
+  if (!valid) return null;
+  const { system_id: system, object_type: type, object_id: id } = valid;
+  const definition = OBJECTS[type];
+  return {
+    id: `auto_s${system}_t${type}_o${id}`,
+    name: `IPL ${definition.label} ${id} (System ${system})`,
+    eventTypes: [...definition.eventTypes]
+  };
+}
+function occupancy(status) {
+  const names = { 1: "unknown", 3: "occupied", 4: "unoccupied", 255: "disabled" };
+  return { status, ...Object.hasOwn(names, status) ? { status_name: names[status] } : {} };
+}
+function decodeObservation(frame, sessionId, receivedAt = (/* @__PURE__ */ new Date()).toISOString()) {
+  const { body, msgType, operationId } = frame;
+  if (!integerInRange(frame.version, 1, 3) || body.length < 6 || operationId === void 0) return null;
+  const object3 = validateObservedObject({ system_id: frame.systemId, object_type: body.readUInt16BE(4), object_id: body.readUInt32BE(0) });
+  if (!object3) return null;
+  const type = object3.object_type;
+  const event = (eventType, source, fields2 = {}) => ({
+    ...object3,
+    event_type: eventType,
+    source_kind: source,
+    operation_id: operationId,
+    received_at: receivedAt,
+    session_id: sessionId,
+    ...fields2
+  });
+  const level = (offset) => {
+    const wire = body.readUInt16BE(offset);
+    return wire <= LEVEL_MAX ? { level: Math.round(wire * 100 / LEVEL_MAX), wire_value: wire } : null;
+  };
+  if (msgType === 3) {
+    if (type === 57 && operationId === 0 && body.length === 6) return event("button_press_report", "ipl_event_report");
+    if (type === 57 && operationId === 1 && body.length === 8) return event("button_release_report", "ipl_event_report", { trailing_hex: body.subarray(6).toString("hex") });
+    if (operationId === 6 && (type === 38 && body.length === 7 || type === 66 && body.length === 9)) {
+      return event("occupancy_report", "ipl_event_report", { ...occupancy(body[6]), ...type === 66 ? { trailing_hex: body.subarray(7).toString("hex") } : {} });
+    }
+    return null;
+  }
+  if (msgType === 5 && operationId === 1 && body.length >= 7) {
+    const property = body[6];
+    const propertyFields = { property_number: property };
+    if (body.length === 9 && (property === 1 && [9, 15, 3, 198].includes(type) || property === 4 && type === 3)) {
+      const fields2 = level(7);
+      if (!fields2) return null;
+      const names = { 9: "ui_level_report", 15: "zone_level_report", 3: "load_level_report", 198: "shade_level_report" };
+      return event(property === 4 ? "current_level_report" : names[type], "runtime_property_report", { ...propertyFields, ...fields2 });
+    }
+    if (property === 16 && body.length === 8 && [38, 2, 66].includes(type)) return event("occupancy_report", "runtime_property_report", { ...propertyFields, ...occupancy(body[7]) });
+    if (property === 67 && body.length === 9 && [2, 133].includes(type)) return event("scene_selection_report", "runtime_property_report", { ...propertyFields, selection: body.readUInt16BE(7) });
+    if (property === 91 && body.length === 8 && type === 2) return event("area_lighting_report", "runtime_property_report", { ...propertyFields, state: body[7] });
+    return null;
+  }
+  if (msgType === 0 && operationId === 13 && type === 15 && body.length === 14) {
+    const fields2 = level(6);
+    if (!fields2) return null;
+    return event("go_to_level_observed", "ipl_command_observation", {
+      ...fields2,
+      originator_feature: body.readUInt16BE(8),
+      fade_quarters: body.readUInt16BE(10),
+      delay_quarters: body.readUInt16BE(12)
+    });
+  }
+  return null;
+}
+
+// src/naming.ts
+var MAX_BYTES = 1024 * 1024;
+var MAX_NAMES = 4096;
+var record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+var label = (value) => typeof value === "string" && !!value.trim() && value.length <= 160 && !/[\u0000-\u001f\u007f-\u009f]/u.test(value);
+var nameKey = ({ system_id, object_type, object_id }) => describeObject({ system_id, object_type, object_id }).id;
+function parseObjectNames(input, allowArea = false) {
+  if (!Array.isArray(input) || input.length > MAX_NAMES) throw new Error("Invalid object names");
+  const seen = /* @__PURE__ */ new Set();
+  return input.map((value) => {
+    if (!record(value) || Object.keys(value).some((k) => !["system_id", "object_type", "object_id", "name", ...allowArea ? ["area_name"] : []].includes(k))) throw new Error("Invalid object names");
+    const object3 = validateObservedObject({ system_id: value.system_id, object_type: value.object_type, object_id: value.object_id });
+    if (!object3 || !label(value.name) || value.area_name !== void 0 && !label(value.area_name)) throw new Error("Invalid object names");
+    const id = describeObject(object3).id;
+    if (seen.has(id)) throw new Error("Duplicate object names");
+    seen.add(id);
+    return { ...object3, name: value.name.trim(), ...value.area_name === void 0 ? {} : { area_name: value.area_name.trim() } };
+  });
+}
+function readNames(root, filename) {
+  if (!filename || isAbsolute(filename) || filename.includes("\\") || filename.includes("\0")) throw new Error("Invalid metadata file");
+  const parts = filename.split("/");
+  if (parts.some((p) => !p || p === "." || p === "..")) throw new Error("Invalid metadata file");
+  let path = realpathSync(root);
+  for (let i = 0; i < parts.length; i++) {
+    path = join(path, parts[i]);
+    const stat = lstatSync(path);
+    if (stat.isSymbolicLink() || (i < parts.length - 1 ? !stat.isDirectory() : !stat.isFile())) throw new Error("Invalid metadata file");
+  }
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  let input;
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.size > MAX_BYTES) throw new Error("Invalid metadata file");
+    const bytes = Buffer.alloc(MAX_BYTES + 1);
+    let size = 0, count = 0;
+    do {
+      count = readSync(fd, bytes, size, bytes.length - size, null);
+      size += count;
+    } while (count && size < bytes.length);
+    if (size > MAX_BYTES) throw new Error("Invalid metadata file");
+    input = JSON.parse(bytes.subarray(0, size).toString("utf8"));
+  } finally {
+    closeSync(fd);
+  }
+  if (!record(input) || input.version !== 1 || Object.keys(input).some((k) => !["version", "objects", "generated_at", "source"].includes(k)) || input.source !== void 0 && input.source !== "designer" || input.generated_at !== void 0 && (typeof input.generated_at !== "string" || input.generated_at.length > 40 || !Number.isFinite(Date.parse(input.generated_at)))) throw new Error("Invalid metadata file");
+  return parseObjectNames(input.objects, true);
+}
+function createNameResolver(config, log = () => {
+}) {
+  const names = /* @__PURE__ */ new Map();
+  if (config.metadata_file) {
+    try {
+      const objects = readNames(config.credential_dir, config.metadata_file);
+      for (const object3 of objects) names.set(nameKey(object3), object3.area_name ? `${object3.area_name} / ${object3.name}` : object3.name);
+      log(`[naming] imported ${objects.length} object names; snapshot loaded at startup`);
+    } catch {
+      log("[naming] metadata unavailable or invalid; using overrides and generic names");
+    }
+  }
+  for (const object3 of parseObjectNames(config.name_overrides ?? [])) names.set(nameKey(object3), object3.name);
+  return (object3) => {
+    const descriptor = describeObject(object3);
+    if (!descriptor) throw new Error("Invalid named object");
+    return names.get(descriptor.id) ?? descriptor.name;
+  };
+}
+
+// src/config.ts
 var fields = /* @__PURE__ */ new Set([
   "processor_host",
   "processor_port",
@@ -26584,7 +26756,9 @@ var fields = /* @__PURE__ */ new Set([
   "publish_debug",
   "mappings",
   "auto_discover",
-  "max_discovered_objects"
+  "max_discovered_objects",
+  "metadata_file",
+  "name_overrides"
 ]);
 var idPattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 var topicPattern = /^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/;
@@ -26605,11 +26779,11 @@ function integer(value, field, min, max) {
   return value;
 }
 function validHost(host) {
-  return isIP(host) !== 0 || host.length <= 253 && host.split(".").every((label) => /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(label));
+  return isIP(host) !== 0 || host.length <= 253 && host.split(".").every((label2) => /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(label2));
 }
 function fileOption(input, field, fallback) {
   const value = text(input, field, fallback);
-  if (!value || isAbsolute(value) || value.includes("\\") || value.split("/").some((part) => !part || part === "." || part === "..")) {
+  if (!value || isAbsolute2(value) || value.includes("\\") || value.split("/").some((part) => !part || part === "." || part === "..")) {
     throw new Error(`Invalid credential path: ${field}`);
   }
   return value;
@@ -26647,6 +26821,9 @@ function parseOptions(input, environment = {}) {
   const autoDiscover = input.auto_discover ?? false;
   if (typeof autoDiscover !== "boolean") throw new Error("Invalid option: auto_discover");
   const maxObjects = integer(input.max_discovered_objects ?? 128, "max_discovered_objects", 1, 256);
+  const metadataFile = text(input, "metadata_file", "");
+  if (metadataFile) fileOption(input, "metadata_file", "");
+  const nameOverrides = parseObjectNames(input.name_overrides ?? []);
   const rawMappings = input.mappings ?? [];
   if (!Array.isArray(rawMappings) || rawMappings.length > 256) throw new Error("Invalid option: mappings");
   const ids = /* @__PURE__ */ new Set(), objects = /* @__PURE__ */ new Set();
@@ -26678,7 +26855,9 @@ function parseOptions(input, environment = {}) {
     publish_debug: debug,
     mappings,
     auto_discover: autoDiscover,
-    max_discovered_objects: maxObjects
+    max_discovered_objects: maxObjects,
+    metadata_file: metadataFile,
+    name_overrides: nameOverrides
   };
 }
 function readOptionsFile(file, environment = {}) {
@@ -26693,13 +26872,13 @@ function readOptionsFile(file, environment = {}) {
 function credentialFile(root, name) {
   let base, file;
   try {
-    base = realpathSync(root);
-    file = realpathSync(join(base, name));
+    base = realpathSync2(root);
+    file = realpathSync2(join2(base, name));
   } catch {
     throw new Error("Missing or unreadable credential file");
   }
   const rel = relative(base, file);
-  if (!rel || rel.startsWith("..") || isAbsolute(rel)) throw new Error("Credential file escapes configured directory");
+  if (!rel || rel.startsWith("..") || isAbsolute2(rel)) throw new Error("Credential file escapes configured directory");
   return file;
 }
 function certificates(file, now) {
@@ -26739,7 +26918,7 @@ function validateCredentials(config, now = /* @__PURE__ */ new Date()) {
 var MAGIC = Buffer.from("LEI");
 var MAX_PENDING = 128 * 1024;
 var INCOMPLETE_MS = 1e4;
-var LEVEL_MAX = 65279;
+var LEVEL_MAX2 = 65279;
 var IplStreamDecoder = class {
   constructor(now = Date.now) {
     this.now = now;
@@ -26826,112 +27005,14 @@ function levelEvent(frame, mappings, sessionId, receivedAt = (/* @__PURE__ */ ne
   if (frame.body.readUInt16BE(4) !== 9 || frame.body[6] !== 1) return null;
   const mapping = mappings.find((m) => m.ui_object_id === objectId);
   const wire = frame.body.readUInt16BE(7);
-  if (!mapping || wire > LEVEL_MAX) return null;
-  return { mappingId: mapping.id, event: { event_type: "level_adjustment", source_kind: "ui_level_report", device_id: mapping.device_id, ui_object_id: objectId, level: Math.round(wire * 100 / LEVEL_MAX), wire_value: wire, received_at: receivedAt, session_id: sessionId } };
+  if (!mapping || wire > LEVEL_MAX2) return null;
+  return { mappingId: mapping.id, event: { event_type: "level_adjustment", source_kind: "ui_level_report", device_id: mapping.device_id, ui_object_id: objectId, level: Math.round(wire * 100 / LEVEL_MAX2), wire_value: wire, received_at: receivedAt, session_id: sessionId } };
 }
 function buildPing(messageId) {
   if (!Number.isInteger(messageId) || messageId < 0 || messageId > 65535) throw new Error("Invalid Ping message ID");
   const ping = Buffer.from("4c454950000101ff0000000b0000", "hex");
   ping.writeUInt16BE(messageId, 8);
   return ping;
-}
-
-// src/observations.ts
-var LEVEL_MAX2 = 65279;
-var OBJECTS = {
-  2: { label: "Area", eventTypes: ["occupancy_report", "scene_selection_report", "area_lighting_report"] },
-  3: { label: "Load Controller", eventTypes: ["load_level_report", "current_level_report"] },
-  9: { label: "UI", eventTypes: ["ui_level_report"] },
-  15: { label: "Zone", eventTypes: ["zone_level_report", "go_to_level_observed"] },
-  38: { label: "Occupancy Group", eventTypes: ["occupancy_report"] },
-  57: { label: "Button", eventTypes: ["button_press_report", "button_release_report"] },
-  66: { label: "Object Type 66", eventTypes: ["occupancy_report"] },
-  133: { label: "Shade Group", eventTypes: ["scene_selection_report"] },
-  198: { label: "Shade Object", eventTypes: ["shade_level_report"] }
-};
-function integerInRange(value, min, max) {
-  return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
-}
-function validateObservedObject(input) {
-  if (input === null || typeof input !== "object" || Array.isArray(input)) return null;
-  const prototype = Object.getPrototypeOf(input);
-  if (prototype !== Object.prototype && prototype !== null) return null;
-  const keys = Reflect.ownKeys(input);
-  const expected = ["system_id", "object_type", "object_id"];
-  if (keys.length !== expected.length || expected.some((key) => !keys.includes(key))) return null;
-  const values = expected.map((key) => Object.getOwnPropertyDescriptor(input, key));
-  if (values.some((value) => !value || !("value" in value))) return null;
-  const [system, type, object3] = values.map((value) => value.value);
-  if (!integerInRange(system, 0, 65535) || !integerInRange(type, 0, 65535) || !integerInRange(object3, 1, 4294967295) || !Object.hasOwn(OBJECTS, type)) return null;
-  return { system_id: system, object_type: type, object_id: object3 };
-}
-function describeObject(object3) {
-  const valid = validateObservedObject(object3);
-  if (!valid) return null;
-  const { system_id: system, object_type: type, object_id: id } = valid;
-  const definition = OBJECTS[type];
-  return {
-    id: `auto_s${system}_t${type}_o${id}`,
-    name: `IPL ${definition.label} ${id} (System ${system})`,
-    eventTypes: [...definition.eventTypes]
-  };
-}
-function occupancy(status) {
-  const names = { 1: "unknown", 3: "occupied", 4: "unoccupied", 255: "disabled" };
-  return { status, ...Object.hasOwn(names, status) ? { status_name: names[status] } : {} };
-}
-function decodeObservation(frame, sessionId, receivedAt = (/* @__PURE__ */ new Date()).toISOString()) {
-  const { body, msgType, operationId } = frame;
-  if (!integerInRange(frame.version, 1, 3) || body.length < 6 || operationId === void 0) return null;
-  const object3 = validateObservedObject({ system_id: frame.systemId, object_type: body.readUInt16BE(4), object_id: body.readUInt32BE(0) });
-  if (!object3) return null;
-  const type = object3.object_type;
-  const event = (eventType, source, fields2 = {}) => ({
-    ...object3,
-    event_type: eventType,
-    source_kind: source,
-    operation_id: operationId,
-    received_at: receivedAt,
-    session_id: sessionId,
-    ...fields2
-  });
-  const level = (offset) => {
-    const wire = body.readUInt16BE(offset);
-    return wire <= LEVEL_MAX2 ? { level: Math.round(wire * 100 / LEVEL_MAX2), wire_value: wire } : null;
-  };
-  if (msgType === 3) {
-    if (type === 57 && operationId === 0 && body.length === 6) return event("button_press_report", "ipl_event_report");
-    if (type === 57 && operationId === 1 && body.length === 8) return event("button_release_report", "ipl_event_report", { trailing_hex: body.subarray(6).toString("hex") });
-    if (operationId === 6 && (type === 38 && body.length === 7 || type === 66 && body.length === 9)) {
-      return event("occupancy_report", "ipl_event_report", { ...occupancy(body[6]), ...type === 66 ? { trailing_hex: body.subarray(7).toString("hex") } : {} });
-    }
-    return null;
-  }
-  if (msgType === 5 && operationId === 1 && body.length >= 7) {
-    const property = body[6];
-    const propertyFields = { property_number: property };
-    if (body.length === 9 && (property === 1 && [9, 15, 3, 198].includes(type) || property === 4 && type === 3)) {
-      const fields2 = level(7);
-      if (!fields2) return null;
-      const names = { 9: "ui_level_report", 15: "zone_level_report", 3: "load_level_report", 198: "shade_level_report" };
-      return event(property === 4 ? "current_level_report" : names[type], "runtime_property_report", { ...propertyFields, ...fields2 });
-    }
-    if (property === 16 && body.length === 8 && [38, 2, 66].includes(type)) return event("occupancy_report", "runtime_property_report", { ...propertyFields, ...occupancy(body[7]) });
-    if (property === 67 && body.length === 9 && [2, 133].includes(type)) return event("scene_selection_report", "runtime_property_report", { ...propertyFields, selection: body.readUInt16BE(7) });
-    if (property === 91 && body.length === 8 && type === 2) return event("area_lighting_report", "runtime_property_report", { ...propertyFields, state: body[7] });
-    return null;
-  }
-  if (msgType === 0 && operationId === 13 && type === 15 && body.length === 14) {
-    const fields2 = level(6);
-    if (!fields2) return null;
-    return event("go_to_level_observed", "ipl_command_observation", {
-      ...fields2,
-      originator_feature: body.readUInt16BE(8),
-      fade_quarters: body.readUInt16BE(10),
-      delay_quarters: body.readUInt16BE(12)
-    });
-  }
-  return null;
 }
 
 // src/transport.ts
@@ -27118,29 +27199,29 @@ function startTransport(options) {
 // src/mqtt.ts
 var import_mqtt = __toESM(require_build2(), 1);
 import { createHash, randomUUID as randomUUID2 } from "node:crypto";
-import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { join as join2 } from "node:path";
+import { closeSync as closeSync2, constants as constants2, fstatSync as fstatSync2, lstatSync as lstatSync2, mkdirSync, openSync as openSync2, readSync as readSync2, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { join as join3 } from "node:path";
 var MAX_OBJECTS = 256;
 var OBJECT_FILE_BYTES = 64 * 1024;
 var TOPIC_FILE_BYTES = 2 * 1024 * 1024;
 function readInventory(path, maxBytes) {
-  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  const fd = openSync2(path, constants2.O_RDONLY | constants2.O_NOFOLLOW | constants2.O_NONBLOCK);
   try {
-    const stat = fstatSync(fd);
+    const stat = fstatSync2(fd);
     if (!stat.isFile() || stat.size > maxBytes) throw new Error("invalid inventory");
     const buffer = Buffer.alloc(maxBytes + 1);
-    const size = readSync(fd, buffer, 0, buffer.length, 0);
+    const size = readSync2(fd, buffer, 0, buffer.length, 0);
     if (size > maxBytes) throw new Error("invalid inventory");
     return JSON.parse(buffer.subarray(0, size).toString("utf8"));
   } finally {
-    closeSync(fd);
+    closeSync2(fd);
   }
 }
 function writeInventory(path, contents, maxBytes) {
   const payload = JSON.stringify(contents) + "\n";
   if (Buffer.byteLength(payload) > maxBytes) throw new Error("invalid inventory");
   try {
-    if (!lstatSync(path).isFile()) throw new Error("invalid inventory");
+    if (!lstatSync2(path).isFile()) throw new Error("invalid inventory");
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
@@ -27155,7 +27236,7 @@ function writeInventory(path, contents, maxBytes) {
     }
   }
 }
-function record(value) {
+function record2(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function createPublisher(config, broker, log = () => {
@@ -27168,6 +27249,7 @@ function createPublisher(config, broker, log = () => {
   const mappings = new Map(config.mappings.map((m) => [m.id, m]));
   const discovery = /* @__PURE__ */ new Map();
   const device = { identifiers: [`${uniquePrefix}app`], name: `Lutron IPL ${config.instance_id}`, manufacturer: "Lutron", model: "Experimental IPL observer" };
+  const resolveName = createNameResolver(config, log);
   for (const mapping of config.mappings) {
     const id = `${uniquePrefix}${mapping.id}`;
     discovery.set(`${config.discovery_prefix}/event/${id}/config`, JSON.stringify({
@@ -27193,7 +27275,7 @@ function createPublisher(config, broker, log = () => {
     entity_category: "diagnostic",
     device
   }));
-  const inventoryPath = join2(config.data_dir, `lutron-ipl-discovery-${owner}.json`);
+  const inventoryPath = join3(config.data_dir, `lutron-ipl-discovery-${owner}.json`);
   const isOwned = (topic) => {
     if (typeof topic !== "string") return false;
     if (topic === healthDiscovery) return true;
@@ -27203,13 +27285,13 @@ function createPublisher(config, broker, log = () => {
   let previousTopics = [];
   try {
     const stored = readInventory(inventoryPath, TOPIC_FILE_BYTES);
-    if (!record(stored) || stored.version !== 1 || stored.owner !== owner || !Array.isArray(stored.topics) || stored.topics.length > 257 || !stored.topics.every(isOwned)) throw new Error("invalid inventory");
+    if (!record2(stored) || stored.version !== 1 || stored.owner !== owner || !Array.isArray(stored.topics) || stored.topics.length > 257 || !stored.topics.every(isOwned)) throw new Error("invalid inventory");
     previousTopics = [...new Set(stored.topics)];
   } catch (error) {
     if (error.code !== "ENOENT") log("[mqtt] discovery inventory invalid or unreadable; cleanup skipped");
   }
   const manualTopics = [...discovery.keys()];
-  const objectsPath = join2(config.data_dir, `lutron-ipl-objects-${owner}.json`);
+  const objectsPath = join3(config.data_dir, `lutron-ipl-objects-${owner}.json`);
   const registry = /* @__PURE__ */ new Map();
   let previousObjects = /* @__PURE__ */ new Map();
   const mappedUi = new Set(config.mappings.map((mapping) => mapping.ui_object_id));
@@ -27218,7 +27300,7 @@ function createPublisher(config, broker, log = () => {
   const addDiscovery = (object3) => {
     const descriptor = describeObject(object3);
     discovery.set(autoTopic(descriptor.id), JSON.stringify({
-      name: `${descriptor.name} (experimental)`,
+      name: `${resolveName(object3)} (experimental)`,
       unique_id: `${uniquePrefix}auto:${descriptor.id}`,
       object_id: `${uniquePrefix}auto_${descriptor.id}`,
       state_topic: `${root}/auto/${descriptor.id}/event`,
@@ -27230,7 +27312,7 @@ function createPublisher(config, broker, log = () => {
   };
   try {
     const stored = readInventory(objectsPath, OBJECT_FILE_BYTES);
-    if (!record(stored) || Object.keys(stored).sort().join(",") !== "objects,owner,version" || stored.version !== 1 || stored.owner !== owner || !Array.isArray(stored.objects) || stored.objects.length > MAX_OBJECTS) throw new Error("invalid inventory");
+    if (!record2(stored) || Object.keys(stored).sort().join(",") !== "objects,owner,version" || stored.version !== 1 || stored.owner !== owner || !Array.isArray(stored.objects) || stored.objects.length > MAX_OBJECTS) throw new Error("invalid inventory");
     const validated = /* @__PURE__ */ new Map();
     for (const input of stored.objects) {
       const object3 = validateObservedObject(input), descriptor = object3 && describeObject(object3);
@@ -27580,7 +27662,7 @@ function object2(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function validHost2(host) {
-  return isIP2(host) !== 0 || host.length <= 253 && host.split(".").every((label) => /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/.test(label));
+  return isIP2(host) !== 0 || host.length <= 253 && host.split(".").every((label2) => /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/.test(label2));
 }
 
 // src/runtime.ts

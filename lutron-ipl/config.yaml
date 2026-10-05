@@ -1,5 +1,5 @@
 name: Lutron IPL Events
-version: "0.2.1"
+version: "0.3.0"
 slug: lutron-ipl
 description: Experimental observational IPL reports and passive discovery over MQTT
 arch:
@@ -35,6 +35,8 @@ options:
   publish_debug: false
   auto_discover: false
   max_discovered_objects: 128
+  metadata_file: ""
+  name_overrides: []
   mappings: []
 schema:
   processor_host: str
@@ -54,6 +56,12 @@ schema:
   publish_debug: bool
   auto_discover: bool
   max_discovered_objects: int(1,256)
+  metadata_file: str
+  name_overrides:
+    - system_id: int(0,65535)
+      object_type: int(0,65535)
+      object_id: int(1,4294967295)
+      name: str(1,160)
   mappings:
     - id: match(^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$)
       name: str(1,160)

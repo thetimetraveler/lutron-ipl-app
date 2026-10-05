@@ -35,7 +35,7 @@ function stage(repo: string, destination?: string) {
 
 test('HA manifest exactly exposes the flat options and nested mapping contract', () => {
   const config = manifest();
-  const expected = ['processor_host', 'processor_port', 'client_cert', 'client_key', 'ca_cert', 'expected_server_name', 'expected_server_ip', 'mqtt_url', 'mqtt_username', 'mqtt_password', 'instance_id', 'base_topic', 'discovery_prefix', 'ha_birth_topic', 'publish_debug', 'auto_discover', 'max_discovered_objects', 'mappings'].sort();
+  const expected = ['processor_host', 'processor_port', 'client_cert', 'client_key', 'ca_cert', 'expected_server_name', 'expected_server_ip', 'mqtt_url', 'mqtt_username', 'mqtt_password', 'instance_id', 'base_topic', 'discovery_prefix', 'ha_birth_topic', 'publish_debug', 'auto_discover', 'max_discovered_objects', 'mappings', 'metadata_file','name_overrides'].sort();
   assert.deepEqual(Object.keys(config.options).sort(), expected);
   assert.deepEqual(Object.keys(config.schema).sort(), expected);
   assert.equal(config.options.auto_discover, false);

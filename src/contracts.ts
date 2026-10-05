@@ -26,6 +26,13 @@ export interface AppConfig {
   data_dir: string;
   auto_discover?: boolean;
   max_discovered_objects?: number;
+  metadata_file?: string;
+  name_overrides?: ObjectName[];
+}
+
+export interface ObjectName extends ObservedObject {
+  name: string;
+  area_name?: string;
 }
 
 export interface ObservedObject {

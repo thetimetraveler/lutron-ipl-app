@@ -9,6 +9,21 @@ import { parseOptions, validateCredentials, readOptionsFile } from "../src/confi
 const mapping = { id: "control", name: "Example control", device_id: 101, ui_object_id: 102 };
 const valid = { processor_host: "processor.example", mappings: [mapping] };
 
+test('accepts optional private metadata and exact composite name overrides', () => {
+  const override = {system_id: 7, object_type: 15, object_id: 9001, name: 'Kitchen ceiling'};
+  const config = parseOptions({...valid, metadata_file: 'object-metadata.json', name_overrides: [override]});
+  assert.equal(config.metadata_file, 'object-metadata.json');
+  assert.deepEqual(config.name_overrides, [override]);
+  assert.equal(parseOptions(valid).metadata_file, '');
+  assert.deepEqual(parseOptions(valid).name_overrides, []);
+  for (const bad of [
+    {metadata_file: '../outside.json'}, {metadata_file: '/outside.json'}, {metadata_file: 'nested/../outside.json'},
+    {name_overrides: [override, override]}, {name_overrides: [{...override, name:'  '}]},
+    {name_overrides: [{...override, name:'secret\nline'}]}, {name_overrides: [{...override, object_type: 999}]},
+    {name_overrides: [{...override, system_id: 65536}]}, {name_overrides: [{...override, object_id: 0}]},
+  ]) assert.throws(() => parseOptions({...valid, ...bad}), error => !String(error).includes('secret'));
+});
+
 test("parses explicit host and secure mount defaults without embedding household identity", () => {
   const config = parseOptions(valid);
   assert.equal(config.processor_port, 8902);
