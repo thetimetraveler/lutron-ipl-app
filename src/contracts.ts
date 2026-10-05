@@ -24,6 +24,33 @@ export interface AppConfig {
   publish_debug: boolean;
   mappings: UiMapping[];
   data_dir: string;
+  auto_discover?: boolean;
+  max_discovered_objects?: number;
+}
+
+export interface ObservedObject {
+  system_id: number;
+  object_type: number;
+  object_id: number;
+}
+
+export interface ObservationEvent extends ObservedObject {
+  event_type: string;
+  source_kind: "ipl_event_report" | "runtime_property_report" | "ipl_command_observation";
+  operation_id: number;
+  property_number?: number;
+  received_at: string;
+  session_id: string;
+  level?: number;
+  wire_value?: number;
+  status?: number;
+  status_name?: string;
+  selection?: number;
+  state?: number;
+  trailing_hex?: string;
+  originator_feature?: number;
+  fade_quarters?: number;
+  delay_quarters?: number;
 }
 
 export interface IplFrame {
@@ -67,6 +94,7 @@ export interface Publisher {
   setIplHealth(healthy: boolean): void;
   publishLevel(mappingId: string, event: LevelEvent): boolean;
   publishDebug(frame: IplFrame, sessionId: string): boolean;
+  publishObservation?(event: ObservationEvent): boolean;
   stop(): Promise<void>;
 }
 
