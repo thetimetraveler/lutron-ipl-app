@@ -7,7 +7,7 @@ import type { AppConfig, UiMapping } from "./contracts.js";
 const fields = new Set([
   "processor_host", "processor_port", "client_cert", "client_key", "ca_cert",
   "expected_server_name", "expected_server_ip", "mqtt_url", "mqtt_username", "mqtt_password",
-  "instance_id", "base_topic", "discovery_prefix", "ha_birth_topic", "publish_debug", "mappings",
+  "instance_id", "base_topic", "discovery_prefix", "ha_birth_topic", "publish_debug", "mappings", "auto_discover", "max_discovered_objects",
 ]);
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const topicPattern = /^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/;
@@ -68,6 +68,9 @@ export function parseOptions(input: unknown, environment: { credentialDir?: stri
   for (const [field,value] of Object.entries(topics)) if (!topicPattern.test(value)) throw new Error(`Invalid option: ${field}`);
   const debug = input.publish_debug ?? false;
   if (typeof debug !== "boolean") throw new Error("Invalid option: publish_debug");
+  const autoDiscover = input.auto_discover ?? false;
+  if (typeof autoDiscover !== "boolean") throw new Error("Invalid option: auto_discover");
+  const maxObjects = integer(input.max_discovered_objects ?? 128,"max_discovered_objects",1,256);
   const rawMappings = input.mappings ?? [];
   if (!Array.isArray(rawMappings) || rawMappings.length > 256) throw new Error("Invalid option: mappings");
   const ids = new Set<string>(), objects = new Set<number>();
@@ -86,7 +89,7 @@ export function parseOptions(input: unknown, environment: { credentialDir?: stri
     client_cert: fileOption(input,"client_cert","ipl_client_cert.pem"), client_key: fileOption(input,"client_key","ipl_client_key.pem"),
     ca_cert: fileOption(input,"ca_cert","processor_ca.pem"), expected_server_name: expectedName, expected_server_ip: expectedIp,
     mqtt_url: mqttUrl, mqtt_username: text(input,"mqtt_username",""), mqtt_password: text(input,"mqtt_password",""),
-    instance_id: instance, ...topics, publish_debug: debug, mappings,
+    instance_id: instance, ...topics, publish_debug: debug, mappings, auto_discover: autoDiscover, max_discovered_objects: maxObjects,
   };
 }
 

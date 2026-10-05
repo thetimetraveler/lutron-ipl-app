@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { EventEmitter, once } from 'node:events';
 import { Duplex } from 'node:stream';
 import { MqttClient } from 'mqtt';
-import { mkdtempSync, readFileSync, readdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync, rmSync, symlinkSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test, type TestContext } from 'node:test';
-import type { AppConfig, LevelEvent, IplFrame } from '../src/contracts.js';
+import type { AppConfig, LevelEvent, IplFrame, ObservationEvent } from '../src/contracts.js';
 import { createPublisher, type ClientLike, type PublisherOptions } from '../src/mqtt.js';
 
 class FakeClient extends EventEmitter implements ClientLike {
@@ -188,3 +188,131 @@ for (const mode of ['silent-close','stalled-destroy'] as const) {
     assert.equal(publisher.publishLevel('wall',event),false,mode);
   });
 }
+
+
+const observation=(overrides:Partial<ObservationEvent>={}):ObservationEvent=>({system_id:1,object_type:57,object_id:20,
+  event_type:'button_press_report',source_kind:'ipl_event_report',operation_id:0,
+  received_at:'2026-10-04T00:00:00Z',session_id:'session-one',...overrides});
+const autoConfigs=(f:ReturnType<typeof fixture>)=>f.client.writes.filter(w=>w.topic.includes('auto/auto_s') && w.topic.endsWith('/config') && w.payload);
+const observedFile=(f:ReturnType<typeof fixture>)=>join(f.config.data_dir,readdirSync(f.config.data_dir).find(name=>name.startsWith('lutron-ipl-objects-'))!);
+
+test('opt-in automatic reports derive stable separate identities and fixed discovery types',t=>{
+  const off=fixture(t);off.client.connect();assert.equal(off.publisher.publishObservation!(observation()),false);
+  const f=fixture(t,{auto_discover:true,mappings:[{id:'auto_s1_t57_o20',name:'Explicit',device_id:5,ui_object_id:10}]});f.client.connect();
+  assert.equal(autoConfigs(f).length,0);assert.equal(f.publisher.publishObservation!(observation()),true);
+  const automatic=autoConfigs(f)[0],payload=JSON.parse(automatic.payload);
+  assert.ok(automatic.topic.endsWith('auto/auto_s1_t57_o20/config'));
+  assert.ok(payload.name.includes('20'));assert.deepEqual(payload.event_types,['button_press_report','button_release_report']);
+  const manual=f.client.writes.find(w=>w.topic.endsWith('auto_s1_t57_o20/config') && !w.topic.includes('auto/auto_s'))!;
+  assert.notEqual(payload.unique_id,JSON.parse(manual.payload).unique_id);
+  assert.equal(payload.state_topic,`${f.config.base_topic}/${f.config.instance_id}/auto/auto_s1_t57_o20/event`);
+  const report=f.client.writes.find(w=>w.topic===payload.state_topic)!;
+  assert.deepEqual(report.options,{retain:false,qos:0});assert.deepEqual(JSON.parse(report.payload),observation());
+});
+
+test('registry stores numeric descriptors only and restores quiet objects without replay',t=>{
+  const first=fixture(t,{auto_discover:true});first.client.connect();first.publisher.publishObservation!(observation());
+  const file=observedFile(first),stored=JSON.parse(readFileSync(file,'utf8'));
+  assert.deepEqual(stored.objects,[{system_id:1,object_type:57,object_id:20}]);assert.equal(statSync(file).mode & 0o777,0o600);
+  assert.ok(!readFileSync(file,'utf8').includes('session-one'));
+  const restored=fixture(t,{auto_discover:true,data_dir:first.config.data_dir});restored.client.connect();
+  assert.equal(autoConfigs(restored).length,1);assert.equal(restored.client.writes.filter(w=>w.topic.endsWith('/event')).length,0);
+  restored.client.emit('message',restored.config.ha_birth_topic,Buffer.from('online'));restored.client.connected=false;restored.client.emit('close');restored.client.connect();
+  assert.equal(autoConfigs(restored).length,3);assert.equal(restored.client.writes.filter(w=>w.topic.endsWith('/event')).length,0);
+});
+
+test('explicit UI mappings suppress newly seen and restored automatic UI discovery',t=>{
+  const first=fixture(t,{auto_discover:true,mappings:[]});first.client.connect();
+  const ui=observation({object_type:9,object_id:10,event_type:'ui_level_report',source_kind:'runtime_property_report',operation_id:1,property_number:1,level:50,wire_value:0x7f80});
+  assert.equal(first.publisher.publishObservation!(ui),true);const topic=autoConfigs(first)[0].topic;
+  const next=fixture(t,{auto_discover:true,data_dir:first.config.data_dir});next.client.connect();
+  assert.equal(autoConfigs(next).length,0);assert.ok(next.client.writes.some(w=>w.topic===topic && w.payload===''));
+  assert.equal(next.publisher.publishObservation!(ui),false);assert.equal(autoConfigs(next).length,0);
+  assert.equal(next.publisher.publishLevel('wall',event),true);
+});
+
+test('disabling discovery clears only its owned automatic configs and interrupted cleanup retries',t=>{
+  const first=fixture(t,{auto_discover:true});first.client.connect();first.publisher.publishObservation!(observation());const topic=autoConfigs(first)[0].topic;
+  const other=fixture(t,{auto_discover:false,data_dir:first.config.data_dir,instance_id:'other'});other.client.connect();assert.ok(other.client.writes.every(w=>w.topic!==topic));
+  const interrupted=fixture(t,{auto_discover:false,data_dir:first.config.data_dir});interrupted.client.hold=true;interrupted.client.connect();interrupted.client.connected=false;interrupted.client.emit('close');
+  const disabled=fixture(t,{auto_discover:false,data_dir:first.config.data_dir});disabled.client.connect();
+  assert.ok(disabled.client.writes.some(w=>w.topic===topic && w.payload===''));assert.deepEqual(JSON.parse(readFileSync(observedFile(first),'utf8')).objects,[]);
+});
+
+test('automatic entity cap and 50 per second rate drop reports while existing objects continue',t=>{
+  let now=1000;const f=fixture(t,{auto_discover:true,max_discovered_objects:1},{now:()=>now});f.client.connect();
+  assert.equal(f.publisher.publishObservation!(observation()),true);assert.equal(f.publisher.publishObservation!(observation({object_id:21})),false);
+  for(let i=1;i<50;i++) assert.equal(f.publisher.publishObservation!(observation()),true);
+  assert.equal(f.publisher.publishObservation!(observation()),false);assert.equal(autoConfigs(f).length,1);assert.equal(f.publisher.diagnostics().droppedObservations,2);
+  now+=1000;assert.equal(f.publisher.publishObservation!(observation()),true);
+});
+
+test('automatic reports obey disconnect, socket and inflight bounds with no later replay',t=>{
+  const f=fixture(t,{auto_discover:true},{maxInflight:2,maxBufferedBytes:2048});
+  assert.equal(f.publisher.publishObservation!(observation()),false);f.client.connect();assert.equal(autoConfigs(f).length,1);
+  f.client.hold=true;assert.equal(f.publisher.publishObservation!(observation()),true);assert.equal(f.publisher.publishObservation!(observation()),true);assert.equal(f.publisher.publishObservation!(observation()),false);
+  f.client.connected=false;f.client.emit('close');f.client.hold=false;f.client.connect();
+  assert.equal(f.client.writes.filter(w=>w.topic.endsWith('/event')).length,2);f.client.stream.writableLength=2049;assert.equal(f.publisher.publishObservation!(observation()),false);
+});
+
+test('descriptor inventory rejects symlinks, extra fields, unsupported types, corrupt and oversized files',t=>{
+  const first=fixture(t,{auto_discover:true});first.client.connect();first.publisher.publishObservation!(observation());
+  const file=observedFile(first),valid=JSON.parse(readFileSync(file,'utf8'));
+  const invalid=[{...valid,objects:[{...valid.objects[0],topic:'unowned/config'}]}, {...valid,objects:[{system_id:1,object_type:999,object_id:20}]},
+    {...valid,objects:Array.from({length:257},(_,i)=>({system_id:1,object_type:57,object_id:i+1}))}, {...valid,owner:'another'},{...valid,objects:[valid.objects[0],valid.objects[0]]},'{broken',' '.repeat(65537)];
+  for(const stored of invalid) {
+    writeFileSync(file,typeof stored==='string'?stored:JSON.stringify(stored));const next=fixture(t,{auto_discover:true,data_dir:first.config.data_dir});next.client.connect();assert.equal(autoConfigs(next).length,0);
+  }
+  const target=join(first.config.data_dir,'external.json');writeFileSync(target,JSON.stringify(valid));rmSync(file);symlinkSync(target,file);
+  const linked=fixture(t,{auto_discover:true,data_dir:first.config.data_dir});linked.client.connect();assert.equal(autoConfigs(linked).length,0);assert.deepEqual(JSON.parse(readFileSync(target,'utf8')),valid);
+});
+
+test('unsupported event types and malformed numeric identities do not create semantic entities',t=>{
+  const f=fixture(t,{auto_discover:true});f.client.connect();
+  for(const obs of [observation({object_type:999}),observation({object_id:-1}),observation({system_id:1.5}),observation({event_type:'imagined_touch'})]) {
+    assert.equal(f.publisher.publishObservation!(obs),false);
+  }
+  assert.equal(autoConfigs(f).length,0);
+});
+
+
+test('lowered cap retains previously discovered quiet objects and only blocks new admissions',t=>{
+  const first=fixture(t,{auto_discover:true,max_discovered_objects:2});first.client.connect();
+  first.publisher.publishObservation!(observation());first.publisher.publishObservation!(observation({object_id:21}));
+  const lowered=fixture(t,{auto_discover:true,max_discovered_objects:1,data_dir:first.config.data_dir});lowered.client.connect();
+  assert.equal(autoConfigs(lowered).length,2);assert.equal(lowered.publisher.publishObservation!(observation()),true);
+  assert.equal(lowered.publisher.publishObservation!(observation({object_id:21})),true);
+  assert.equal(lowered.publisher.publishObservation!(observation({object_id:22})),false);
+  assert.equal(JSON.parse(readFileSync(observedFile(lowered),'utf8')).objects.length,2);
+});
+
+test('automatic write deadline drops further reports and reconnect republishes discovery only',async t=>{
+  const f=fixture(t,{auto_discover:true},{writeTimeoutMs:10});f.client.connect();f.publisher.publishObservation!(observation());f.client.hold=true;
+  assert.equal(f.publisher.publishObservation!(observation()),true);await new Promise(resolve=>setTimeout(resolve,25));
+  assert.equal(f.client.destroyed,1);assert.equal(f.publisher.publishObservation!(observation()),false);
+  f.client.hold=false;f.client.connect();f.client.callbacks.forEach(callback=>callback());
+  assert.equal(f.client.writes.filter(w=>w.topic.endsWith('/event')).length,2);assert.equal(autoConfigs(f).length,2);
+  assert.equal(f.publisher.diagnostics().writeTimeouts,1);
+});
+
+test('legacy topic inventory rejects oversized arrays, oversized files and symlinks',t=>{
+  const first=fixture(t);first.client.connect();const name=readdirSync(first.config.data_dir).find(name=>name.startsWith('lutron-ipl-discovery-'))!;
+  const file=join(first.config.data_dir,name),valid=JSON.parse(readFileSync(file,'utf8'));
+  for(const stored of [{...valid,topics:Array(258).fill(valid.topics[0])},' '.repeat(2*1024*1024+1)]) {
+    writeFileSync(file,typeof stored==='string'?stored:JSON.stringify(stored));const next=fixture(t,{data_dir:first.config.data_dir,mappings:[]});next.client.connect();
+    assert.ok(next.client.writes.every(write=>write.payload!==''));
+  }
+  const target=join(first.config.data_dir,'external-topics.json');writeFileSync(target,JSON.stringify(valid));rmSync(file);symlinkSync(target,file);
+  const linked=fixture(t,{data_dir:first.config.data_dir,mappings:[]});linked.client.connect();
+  assert.ok(linked.client.writes.every(write=>write.payload!==''));assert.deepEqual(JSON.parse(readFileSync(target,'utf8')),valid);
+});
+
+
+test('bounded manual inventory still accepts the longest parser-supported namespace and mapping count',t=>{
+  const mappings=Array.from({length:256},(_,i)=>({id:`mapping_${i}`,name:`Mapping ${i}`,device_id:i+1,ui_object_id:i+1}));
+  const first=fixture(t,{discovery_prefix:'a'.repeat(4096),mappings});first.client.connect();
+  const inventory=join(first.config.data_dir,readdirSync(first.config.data_dir).find(name=>name.startsWith('lutron-ipl-discovery-'))!);
+  assert.equal(JSON.parse(readFileSync(inventory,'utf8')).topics.length,257);
+  const next=fixture(t,{discovery_prefix:first.config.discovery_prefix,mappings:[],data_dir:first.config.data_dir});next.client.connect();
+  assert.equal(next.client.writes.filter(write=>write.payload==='').length,256);
+});

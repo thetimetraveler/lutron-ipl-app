@@ -1,5 +1,6 @@
 import { readOptionsFile, validateCredentials } from "./config.js";
 import { levelEvent } from "./ipl.js";
+import { decodeObservation } from "./observations.js";
 import { startTransport } from "./transport.js";
 import { createPublisher } from "./mqtt.js";
 import { resolveBroker } from "./supervisor.js";
@@ -24,7 +25,7 @@ function main():void {
   log(config.expected_server_name||config.expected_server_ip
     ? "TLS requires CA trust and the configured expected certificate identity"
     : "TLS compatibility mode verifies CA trust only, not processor hostname/IP identity");
-  const app=startApp(config,credentials,{resolveBroker,createPublisher,startTransport,levelEvent,log});
+  const app=startApp(config,credentials,{resolveBroker,createPublisher,startTransport,levelEvent,decodeObservation,log});
   const stop=()=>{void app.stop().finally(()=>process.exit(0));};
   process.once("SIGINT",stop);process.once("SIGTERM",stop);
   void app.ready;

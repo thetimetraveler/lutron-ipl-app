@@ -81,3 +81,17 @@ test("reads options file and gives static parse/read errors", () => {
   writeFileSync(file,'{"mqtt_password":"SECRET",');
   assert.throws(()=>readOptionsFile(file),(error:Error)=>!error.message.includes("SECRET"));
 });
+
+
+test("automatic discovery defaults are opt-in with a bounded registry", () => {
+  const defaults=parseOptions(valid);
+  assert.equal(defaults.auto_discover,false); assert.equal(defaults.max_discovered_objects,128);
+  for(const cap of [1,128,256]) {
+    const config=parseOptions({...valid,auto_discover:true,max_discovered_objects:cap});
+    assert.equal(config.auto_discover,true); assert.equal(config.max_discovered_objects,cap);
+  }
+  for(const options of [{auto_discover:"true"},{auto_discover:1},{max_discovered_objects:0},
+    {max_discovered_objects:257},{max_discovered_objects:1.5},{max_discovered_objects:"128"}]) {
+    assert.throws(()=>parseOptions({...valid,...options}));
+  }
+});

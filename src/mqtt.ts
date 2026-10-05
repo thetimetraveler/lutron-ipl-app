@@ -1,8 +1,9 @@
-import { createHash } from 'node:crypto';
-import { lstatSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, readSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { connect, type IClientOptions } from 'mqtt';
-import type { AppConfig, Broker, IplFrame, LevelEvent, Publisher } from './contracts.js';
+import { describeObject, validateObservedObject } from './observations.js';
+import type { AppConfig, Broker, IplFrame, LevelEvent, ObservedObject, ObservationEvent, Publisher } from './contracts.js';
 
 export interface ClientLike {
   readonly connected: boolean;
@@ -22,9 +23,35 @@ export interface PublisherOptions {
   debugPerSecond?: number;
   now?: () => number;
 }
-export interface Diagnostics { droppedLevels: number; droppedDebug: number; writeTimeouts: number; publishErrors: number }
+export interface Diagnostics { droppedLevels: number; droppedDebug: number; droppedObservations: number; writeTimeouts: number; publishErrors: number }
 export type ObservablePublisher = Publisher & { diagnostics(): Readonly<Diagnostics> };
 type Control = { topic: string; payload: string };
+const MAX_OBJECTS = 256, OBJECT_FILE_BYTES = 64 * 1024, TOPIC_FILE_BYTES = 2 * 1024 * 1024;
+
+// Bound allocation before parsing and do not follow an inventory symlink.
+function readInventory(path: string, maxBytes: number): unknown {
+  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.size > maxBytes) throw new Error('invalid inventory');
+    const buffer = Buffer.alloc(maxBytes + 1);
+    const size = readSync(fd, buffer, 0, buffer.length, 0);
+    if (size > maxBytes) throw new Error('invalid inventory');
+    return JSON.parse(buffer.subarray(0, size).toString('utf8'));
+  } finally { closeSync(fd); }
+}
+function writeInventory(path: string, contents: unknown, maxBytes: number): void {
+  const payload = JSON.stringify(contents) + '\n';
+  if (Buffer.byteLength(payload) > maxBytes) throw new Error('invalid inventory');
+  try { if (!lstatSync(path).isFile()) throw new Error('invalid inventory'); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  const temp = `${path}.${randomUUID()}.tmp`;
+  try { writeFileSync(temp, payload, { mode: 0o600, flag: 'wx' }); renameSync(temp, path); }
+  finally { try { unlinkSync(temp); } catch { /* Rename removed it, or creation failed. */ } }
+}
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
 
 /** Stateless observations; only discovery and current health may be republished. */
 export function createPublisher(config: AppConfig, broker: Broker, log: (message: string) => void = () => {}, options: PublisherOptions = {}): ObservablePublisher {
@@ -58,23 +85,60 @@ export function createPublisher(config: AppConfig, broker: Broker, log: (message
   };
   let previousTopics: string[] = [];
   try {
-    // Reject symlinks and invalid inventories as a whole, rather than allowing a
-    // corrupt file to supply even one retained deletion outside this instance.
-    if (!lstatSync(inventoryPath).isFile()) throw new Error('invalid inventory');
-    const stored = JSON.parse(readFileSync(inventoryPath, 'utf8'));
-    if (stored.version !== 1 || stored.owner !== owner || !Array.isArray(stored.topics) || !stored.topics.every(isOwned)) throw new Error('invalid inventory');
+    const stored = readInventory(inventoryPath, TOPIC_FILE_BYTES);
+    if (!record(stored) || stored.version !== 1 || stored.owner !== owner || !Array.isArray(stored.topics) ||
+      stored.topics.length > 257 || !stored.topics.every(isOwned)) throw new Error('invalid inventory');
     previousTopics = [...new Set<string>(stored.topics)];
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') log('[mqtt] discovery inventory invalid or unreadable; cleanup skipped');
   }
+  const manualTopics = [...discovery.keys()];
+  const objectsPath = join(config.data_dir, `lutron-ipl-objects-${owner}.json`);
+  const registry = new Map<string, ObservedObject>();
+  let previousObjects = new Map<string, ObservedObject>();
+  const mappedUi = new Set(config.mappings.map(mapping => mapping.ui_object_id));
+  const suppressed = (object: ObservedObject) => object.object_type === 9 && mappedUi.has(object.object_id);
+  const autoTopic = (id: string) => `${config.discovery_prefix}/event/${uniquePrefix}auto/${id}/config`;
+  const addDiscovery = (object: ObservedObject) => {
+    const descriptor = describeObject(object)!;
+    discovery.set(autoTopic(descriptor.id), JSON.stringify({
+      name: `${descriptor.name} (experimental)`, unique_id: `${uniquePrefix}auto:${descriptor.id}`,
+      object_id: `${uniquePrefix}auto_${descriptor.id}`, state_topic: `${root}/auto/${descriptor.id}/event`,
+      event_types: descriptor.eventTypes, availability: [{ topic: availability }, { topic: healthTopic }],
+      availability_mode: 'all', device,
+    }));
+  };
+  try {
+    const stored = readInventory(objectsPath, OBJECT_FILE_BYTES);
+    if (!record(stored) || Object.keys(stored).sort().join(',') !== 'objects,owner,version' || stored.version !== 1 ||
+      stored.owner !== owner || !Array.isArray(stored.objects) || stored.objects.length > MAX_OBJECTS) throw new Error('invalid inventory');
+    const validated = new Map<string, ObservedObject>();
+    for (const input of stored.objects) {
+      const object = validateObservedObject(input), descriptor = object && describeObject(object);
+      if (!object || !descriptor || validated.has(descriptor.id)) throw new Error('invalid inventory');
+      validated.set(descriptor.id, object);
+    }
+    previousObjects = validated;
+    if (config.auto_discover) for (const [id, object] of validated) {
+      if (!suppressed(object)) { registry.set(id, object); addDiscovery(object); }
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') log('[mqtt] object inventory invalid or unreadable; cleanup skipped');
+  }
+  const saveObjects = (objects: Map<string, ObservedObject>) => {
+    try {
+      mkdirSync(config.data_dir, { recursive: true });
+      writeInventory(objectsPath, { version: 1, owner, objects: [...objects.values()] }, OBJECT_FILE_BYTES);
+    } catch { log('[mqtt] object inventory could not be saved'); }
+  };
   const persist = () => {
     try {
       mkdirSync(config.data_dir, { recursive: true });
-      const temp = `${inventoryPath}.${process.pid}.tmp`;
-      writeFileSync(temp, JSON.stringify({ version: 1, owner, topics: [...discovery.keys()] }) + '\n', { mode: 0o600, flag: 'wx' });
-      renameSync(temp, inventoryPath);
-      previousTopics = [...discovery.keys()];
+      writeInventory(inventoryPath, { version: 1, owner, topics: manualTopics }, TOPIC_FILE_BYTES);
+      previousTopics = manualTopics;
     } catch { log('[mqtt] discovery inventory could not be saved'); }
+    if (config.auto_discover || previousObjects.size) saveObjects(registry);
+    previousObjects = new Map(registry);
   };
   const client = (options.clientFactory ?? ((url, opts) => connect(url, opts) as ClientLike))(broker.url, {
     username: broker.username, password: broker.password, clientId: `${uniquePrefix}client`,
@@ -83,12 +147,13 @@ export function createPublisher(config: AppConfig, broker: Broker, log: (message
   });
   const limit = options.maxInflight ?? 16, bufferLimit = options.maxBufferedBytes ?? 64 * 1024;
   const timeout = options.writeTimeoutMs ?? 5000, now = options.now ?? Date.now;
-  const counters: Diagnostics = { droppedLevels: 0, droppedDebug: 0, writeTimeouts: 0, publishErrors: 0 };
+  const counters: Diagnostics = { droppedLevels: 0, droppedDebug: 0, droppedObservations: 0, writeTimeouts: 0, publishErrors: 0 };
   let stopped = false, ready = false, healthy = false, draining = false, inflight = 0, generation = 0, batch = 0;
   let controls: Control[] = [], batchRemaining = 0, batchFailed = false, controlsSince = 0;
   let drainTimer: ReturnType<typeof setTimeout> | undefined;
   const timers = new Set<ReturnType<typeof setTimeout>>();
   let debugWindow = now(), debugCount = 0;
+  let observationWindow = now(), observationCount = 0;
   const clearPending = () => {
     generation++; inflight = 0; for (const timer of timers) clearTimeout(timer); timers.clear();
     controls = []; batchRemaining = 0; batchFailed = true;
@@ -153,6 +218,7 @@ export function createPublisher(config: AppConfig, broker: Broker, log: (message
     // Replace, never append, a pending announcement on repeated HA births.
     controls = [
       ...previousTopics.filter(topic => !discovery.has(topic)).map(topic => ({ topic, payload: '' })),
+      ...[...previousObjects.keys()].map(autoTopic).filter(topic => !discovery.has(topic)).map(topic => ({ topic, payload: '' })),
       ...[...discovery].map(([topic, payload]) => ({ topic, payload })),
       { topic: availability, payload: 'online' }, { topic: healthTopic, payload: healthy ? 'online' : 'offline' },
     ];
@@ -175,7 +241,7 @@ export function createPublisher(config: AppConfig, broker: Broker, log: (message
     if (topic === config.ha_birth_topic && payload.toString() === 'online') announce();
   });
   let stopPromise: Promise<void> | undefined;
-  const dropped = (key: 'droppedLevels' | 'droppedDebug') => {
+  const dropped = (key: 'droppedLevels' | 'droppedDebug' | 'droppedObservations') => {
     counters[key]++;
     if (counters[key] === 1 || counters[key] % 100 === 0) log(`[mqtt] ${key}=${counters[key]}`);
     return false;
@@ -189,6 +255,28 @@ export function createPublisher(config: AppConfig, broker: Broker, log: (message
     publishLevel(mappingId: string, event: LevelEvent) {
       if (!mappings.has(mappingId)) return dropped('droppedLevels');
       return send(`${root}/${mappingId}/event`, JSON.stringify(event), false) || dropped('droppedLevels');
+    },
+    publishObservation(event: ObservationEvent) {
+      if (!config.auto_discover || stopped) return false;
+      const object = validateObservedObject({ system_id: event.system_id, object_type: event.object_type, object_id: event.object_id });
+      const descriptor = object && describeObject(object);
+      if (!object || !descriptor || !descriptor.eventTypes.includes(event.event_type)) return dropped('droppedObservations');
+      if (suppressed(object)) return false;
+      const time = now();
+      if (time - observationWindow >= 1000 || time < observationWindow) { observationWindow = time; observationCount = 0; }
+      if (observationCount >= 50) return dropped('droppedObservations');
+      if (!registry.has(descriptor.id)) {
+        const cap = config.max_discovered_objects ?? 128;
+        // Restored quiet objects survive a lowered cap. Pending removals still
+        // occupy persistence slots until their retained cleanup completes.
+        if (registry.size >= cap || (previousObjects.size >= MAX_OBJECTS && !previousObjects.has(descriptor.id))) return dropped('droppedObservations');
+        registry.set(descriptor.id, object); addDiscovery(object);
+        const pending = new Map([...previousObjects, ...registry]);
+        saveObjects(pending); previousObjects = pending;
+        announce();
+      }
+      observationCount++;
+      return send(`${root}/auto/${descriptor.id}/event`, JSON.stringify(event), false) || dropped('droppedObservations');
     },
     publishDebug(frame: IplFrame, sessionId: string) {
       if (!config.publish_debug) return false;

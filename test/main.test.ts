@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseOptions } from "../src/config.js";
-import type { Broker, IplFrame, Publisher, TransportOptions } from "../src/contracts.js";
+import type { Broker, IplFrame, ObservationEvent, Publisher, TransportOptions } from "../src/contracts.js";
 import { startApp } from "../src/runtime.js";
 
 function setup() {
@@ -63,4 +63,27 @@ test("stop closes both resources even if one fails",async()=>{
   const s=setup();s.publisher.stop=async()=>{throw new Error("fixture close failure");};
   const app=startApp(s.config,{cert:"c",key:"k",ca:"a"},s.deps);await app.ready;
   await app.stop();assert.equal(s.counts().transportStops,1);
+});
+
+
+test("optional observation decoder routes supported events only when enabled",async()=>{
+  const s=setup();s.config.auto_discover=true;
+  const observed:ObservationEvent={system_id:1,object_type:57,object_id:55,event_type:"button_press_report",
+    source_kind:"ipl_event_report",operation_id:0,received_at:"2026-01-01T00:00:00Z",session_id:"session"};
+  let decoded=0;
+  s.publisher.publishObservation=event=>{s.published.push(event);return true;};
+  const app=startApp(s.config,{cert:"c",key:"k",ca:"a"},{...s.deps,
+    decodeObservation:(_frame,session)=>{assert.equal(session,"session");decoded++;return decoded===1?observed:null;}});
+  await app.ready;s.callback!.onFrame({} as IplFrame,"session");s.callback!.onFrame({} as IplFrame,"session");
+  assert.equal(decoded,2);assert.equal(s.published.filter(value=>value===observed).length,1);
+  await app.stop();s.callback!.onFrame({} as IplFrame,"session");assert.equal(decoded,2);
+});
+
+test("disabled discovery skips optional decoder and legacy publishers remain supported",async()=>{
+  const s=setup();let decoded=0;
+  const app=startApp(s.config,{cert:"c",key:"k",ca:"a"},{...s.deps,decodeObservation:()=>{decoded++;return null;}});
+  await app.ready;s.callback!.onFrame({} as IplFrame,"session");assert.equal(decoded,0);await app.stop();
+  s.config.auto_discover=true;
+  const legacy=startApp(s.config,{cert:"c",key:"k",ca:"a"},{...s.deps,decodeObservation:()=>{decoded++;return null;}});
+  await legacy.ready;s.callback!.onFrame({} as IplFrame,"session");await legacy.stop();
 });

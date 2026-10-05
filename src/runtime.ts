@@ -1,10 +1,11 @@
-import type { AppConfig, Broker, IplFrame, LevelEvent, Publisher, TransportOptions, UiMapping } from "./contracts.js";
+import type { AppConfig, Broker, IplFrame, LevelEvent, ObservationEvent, Publisher, TransportOptions, UiMapping } from "./contracts.js";
 
 export interface RuntimeDependencies {
   resolveBroker(config:AppConfig):Promise<Broker|null>;
   createPublisher(config:AppConfig,broker:Broker,log?:(message:string)=>void):Publisher;
   startTransport(options:TransportOptions):{stop():Promise<void>};
   levelEvent(frame:IplFrame,mappings:UiMapping[],sessionId:string):{mappingId:string;event:LevelEvent}|null;
+  decodeObservation?(frame:IplFrame,sessionId:string):ObservationEvent|null;
   log(message:string):void;
   setTimer?(callback:()=>void,delay:number):unknown;
   clearTimer?(timer:unknown):void;
@@ -37,6 +38,10 @@ export function startApp(config:AppConfig, credentials:{cert:string;key:string;c
           if(stopped||!publisher) return;
           const event=deps.levelEvent(frame,config.mappings,sessionId);
           if(event) publisher.publishLevel(event.mappingId,event.event);
+          if(config.auto_discover && deps.decodeObservation && publisher.publishObservation) {
+            const observation=deps.decodeObservation(frame,sessionId);
+            if(observation) publisher.publishObservation(observation);
+          }
           if(config.publish_debug) publisher.publishDebug(frame,sessionId);
         }});
       deps.log("IPL observer started; UI reports are experimental telemetry");
