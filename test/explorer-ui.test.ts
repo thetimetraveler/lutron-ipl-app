@@ -70,11 +70,11 @@ test('report copy explains observation limits and numeric scenes without freshne
 /** Small offline DOM harness: no browser libraries, networking, or household data. */
 class Element {
   tagName:string; id=''; className=''; dataset:Record<string,string>={}; attributes:Record<string,string>={}; children:Element[]=[];
-  listeners:Record<string,((event:any)=>unknown)[]>={}; style:Record<string,string>={}; hidden=false; value=''; selected=false; checked=false; disabled=false; selectedText=false; text=''; title=''; tabIndex=0; onchange:((event:any)=>unknown)|null=null;
+  listeners:Record<string,((event:any)=>unknown)[]>={}; style:Record<string,string>={}; hidden=false; value=''; selected=false; checked=false; disabled=false; selectedText=false; text=''; textAssignments=0; title=''; tabIndex=0; onchange:((event:any)=>unknown)|null=null;
   constructor(tag:string,readonly owner:DocumentHarness){this.tagName=tag;}
   get childNodes(){return this.children;}
   get textContent():string{return this.text+this.children.map(n=>n.textContent).join('');}
-  set textContent(text:string){this.text=String(text);this.children=[];}
+  set textContent(text:string){this.textAssignments++;this.text=String(text);this.children=[];}
   append(...nodes:Element[]){this.children.push(...nodes);}
   replaceChildren(...nodes:Element[]){this.text='';this.children=[...nodes];}
   setAttribute(key:string,value:string){this.attributes[key]=value;}
@@ -176,4 +176,22 @@ test('DOM room keyboard focus follows the exact room when a preceding room is ad
   await browser.tick();await browser.respond(snapshot([],{objects:[object,{...object,key:'another',name:'Another object',room:'Earlier room'}]}));
   assert.ok(browser.document.activeElement?.textContent.startsWith('Example room'));
   assert.ok(browser.node('room-list').children.includes(browser.document.activeElement!));
+});
+
+test('DOM unchanged pinned payload, heading and provenance preserve their existing text nodes',async()=>{
+  const browser=browserHarness();await browser.respond(snapshot([event(1)],{objects:[{...object,latest:event(1)}]}));
+  await browser.node('rows').children.find(e=>e.className.includes('selectable'))!.fire('click');
+  const payload=browser.node('structured-payload'),heading=browser.node('payload-heading'),provenance=browser.node('payload-provenance');
+  const assignments=[payload.textAssignments,heading.textAssignments,provenance.textAssignments];payload.focus();
+  await browser.tick();await browser.respond(snapshot([event(2,'one',90)],{objects:[{...object,latest:event(2,'one',90)}]}));
+  assert.equal(browser.node('structured-payload'),payload);assert.equal(browser.document.activeElement,payload);
+  assert.deepEqual([payload.textAssignments,heading.textAssignments,provenance.textAssignments],assignments);
+  assert.match(payload.textContent,/"level": 30/);
+});
+test('search matches exact numeric identities and object key even when metadata supplies a descriptive name',()=>{
+  const {matches}=client();const named={...object,key:'private-control-key',system_id:4321,object_type:57,object_id:8765,device_id:2468};
+  const filter={room:null,categories:new Set(['controls']),unnamed:false};
+  for(const query of ['4321','57','8765','2468','private-control-key'])assert.equal(matches(named,null,{...filter,query}),true,query);
+  assert.equal(named.name,'Example control');assert.equal(named.room,'Example room');
+  assert.equal(matches(named,null,{...filter,query:'unrelated identity'}),false);
 });

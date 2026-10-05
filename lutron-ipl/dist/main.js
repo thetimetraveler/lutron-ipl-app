@@ -27965,7 +27965,7 @@ var EXPLORER_HTML = `<!doctype html>
 <body><a class="skip" href="#workspace">Skip to activity</a>
 <header class="top"><div><h1>IPL Events</h1><p>Observe your lighting reports</p></div><div id="health" class="health" aria-live="polite">Connecting to explorer\u2026</div></header>
 <div class="shell"><aside class="rooms" aria-label="Rooms"><h2>Rooms</h2><nav id="room-list" aria-label="Room filters"></nav><label class="mobile-room" for="room-select">Room<select id="room-select"></select></label><p class="rail-note">Rooms come from imported metadata. Other objects appear in Unassigned.</p></aside>
-<main id="workspace" tabindex="-1"><div class="toolbar"><div class="tabs" role="group" aria-label="Explorer view"><button id="activity-tab" aria-pressed="true">Activity</button><button id="objects-tab" aria-pressed="false">Objects</button></div><label class="search"><span class="sr-only">Search rooms, objects and reports</span><input id="search" type="search" placeholder="Search rooms, objects, reports" autocomplete="off"></label><button id="pause" aria-pressed="false">Pause display</button></div>
+<main id="workspace" tabindex="-1"><div class="toolbar"><div class="tabs" role="group" aria-label="Explorer view"><button id="activity-tab" aria-pressed="true">Activity</button><button id="objects-tab" aria-pressed="false">Objects</button></div><label class="search"><span class="sr-only">Search rooms, objects, identities and reports</span><input id="search" type="search" placeholder="Search rooms, objects, IDs, reports" autocomplete="off"></label><button id="pause" aria-pressed="false">Pause display</button></div>
 <div class="filters"><fieldset id="categories"><legend class="sr-only">Report categories</legend></fieldset><label><input id="changes" type="checkbox"> Changes only</label><label><input id="unnamed" type="checkbox"> Unnamed only</label></div>
 <p id="context" class="context" role="status">Loading objects and recent reports\u2026</p>
 <div class="workarea"><section class="activity" aria-label="Explorer results"><div class="result-heading"><h2 id="view-title">Recent activity</h2><span id="result-count"></span></div><div class="table-scroll"><table id="results"><thead id="table-head"></thead><tbody id="rows"></tbody></table></div><div id="empty" class="empty" hidden></div><p class="footnote">Receipt times are observation times. Reports can repeat or arrive after reconnect; they do not verify a fresh physical action.</p></section>
@@ -28036,7 +28036,7 @@ function matches(o,e,f){
   if(f.room!==null && (f.room===UNASSIGNED?o.room!==null:o.room!==f.room))return false;
   if(f.unnamed&&o.named)return false;
   if(e ? !f.categories.has(e.category) : !o.categories.some(c=>f.categories.has(c)))return false;
-  const haystack=[o.name,o.room||'Unassigned',...(e?[e.payload.event_type,reportLabel(e.payload.event_type),reportValue(e.payload)]:o.event_types)].join(' ').toLocaleLowerCase();
+  const haystack=[o.name,o.room||'Unassigned',o.key,...[o.system_id,o.object_type,o.object_id,o.device_id].filter(value=>value!==null&&value!==undefined).map(String),...(e?[e.payload.event_type,reportLabel(e.payload.event_type),reportValue(e.payload)]:o.event_types)].join(' ').toLocaleLowerCase();
   return !f.query || haystack.includes(f.query.toLocaleLowerCase());
 }
 if(typeof document!=='undefined'){
@@ -28080,10 +28080,11 @@ if(typeof document!=='undefined'){
     empty.textContent=loading?'Loading objects and recent reports…':data.objects.length===0?'No known objects yet. Configured controls and admitted observed objects will appear here.':view==='activity'&&data.events.length===0?'No recent reports in this app session. Open Objects to inspect quiet or restored objects.':'No matches. Try another room, search or report category.';
   }
   function updatePayload(e,historical){
-    byId('payload-heading').textContent=historical?'Selected structured payload':'Latest structured payload';
-    byId('structured-payload').textContent=e?JSON.stringify(e.payload,null,2):historical?'Selected report left the temporary buffer. Show latest report to inspect current state.':'No recent structured payload in this app session.';
+    const updateText=(id,text)=>{const node=byId(id);if(node.textContent!==text)node.textContent=text;};
+    updateText('payload-heading',historical?'Selected structured payload':'Latest structured payload');
+    updateText('structured-payload',e?JSON.stringify(e.payload,null,2):historical?'Selected report left the temporary buffer. Show latest report to inspect current state.':'No recent structured payload in this app session.');
     byId('latest-report').hidden=!historical;
-    byId('payload-provenance').textContent=e?(e.mqtt_accepted?'MQTT publication attempt accepted. Delivery is not confirmed.':'MQTT publication attempt not accepted. This report is visible only in temporary history.'):historical?'The selected report is no longer available in temporary history.':'This object is known without a recent report.';
+    updateText('payload-provenance',e?(e.mqtt_accepted?'MQTT publication attempt accepted. Delivery is not confirmed.':'MQTT publication attempt not accepted. This report is visible only in temporary history.'):historical?'The selected report is no longer available in temporary history.':'This object is known without a recent report.');
   }
   function renderDetails(data){
     const o=data.objects.find(o=>o.key===selectedKey),body=byId('detail-body');byId('close-details').hidden=!o;
